@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "flow-play/react-flow": fileURLToPath(
+        new URL("../../packages/flow-play/src/react-flow.ts", import.meta.url)
+      ),
       "flow-play": fileURLToPath(new URL("../../packages/flow-play/src/index.ts", import.meta.url))
     }
   },
