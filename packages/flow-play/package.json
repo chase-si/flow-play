@@ -12,17 +12,33 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./react-flow": {
+      "types": "./dist/react-flow.d.ts",
+      "import": "./dist/react-flow.js",
+      "require": "./dist/react-flow.cjs"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "build": "tsup src/index.ts src/react-flow.ts --format esm,cjs && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "peerDependencies": {
+    "@xyflow/react": "^12.11.0",
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
   "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@xyflow/react": "^12.11.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "tsup": "^8.5.1"
   }
 }
