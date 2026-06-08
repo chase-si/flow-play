@@ -1,9 +1,14 @@
 import { createFlowPlaybackPreview, type FlowPlaybackStep } from "flow-play";
 
 const steps: FlowPlaybackStep[] = [
-  { id: "intro", title: "Introduce the flow" },
-  { id: "review", title: "Review the decision point" },
-  { id: "complete", title: "Complete the path" }
+  { id: "intro", title: "Introduce the flow", nodeIds: ["intro"], edgeIds: ["intro-review"] },
+  {
+    id: "review",
+    title: "Review the decision point",
+    nodeIds: ["review"],
+    edgeIds: ["review-complete"]
+  },
+  { id: "complete", title: "Complete the path", nodeIds: ["complete"], edgeIds: [] }
 ];
 
 const preview = createFlowPlaybackPreview(steps);
