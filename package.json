@@ -6,12 +6,16 @@
   "packageManager": "pnpm@9.14.1",
   "scripts": {
     "build": "pnpm --recursive build",
+    "changeset": "pnpm dlx @changesets/cli",
     "dev": "pnpm --filter @flow-play/demo dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
+    "package:check": "pnpm --filter flow-play build",
+    "release": "pnpm package:check && pnpm dlx @changesets/cli publish",
     "test": "pnpm --recursive test",
-    "typecheck": "pnpm --recursive typecheck"
+    "typecheck": "pnpm --recursive typecheck",
+    "version": "pnpm dlx @changesets/cli version"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
