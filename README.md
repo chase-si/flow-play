@@ -16,10 +16,32 @@ pnpm lint
 pnpm format:check
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
 
 The root scripts run across all workspaces so package and app boundaries stay visible.
+
+## Regression Checks
+
+Run the browser journey locally after installing Playwright's Chromium browser once:
+
+```sh
+pnpm exec playwright install chromium
+pnpm test:e2e
+```
+
+Use these commands for a CI-equivalent local gate:
+
+```sh
+pnpm lint
+pnpm test
+pnpm --filter flow-play build
+pnpm --filter @flow-play/demo build
+pnpm test:e2e
+```
+
+GitHub Actions runs the same regression gate on pull requests and pushes to `main`.
 
 ## Package Build
 
