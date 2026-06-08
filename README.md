@@ -20,3 +20,25 @@ pnpm build
 ```
 
 The root scripts run across all workspaces so package and app boundaries stay visible.
+
+## Package Build
+
+`flow-play` publishes two public entrypoints:
+
+- `flow-play`: the headless playback API from `packages/flow-play/src/index.ts`.
+- `flow-play/react-flow`: React Flow integration helpers from `packages/flow-play/src/react-flow.ts`.
+
+Run `pnpm package:check` before publishing package changes. It builds both entrypoints
+with tsup as ESM and CommonJS output, then emits TypeScript declarations into
+`packages/flow-play/dist`. React, React DOM, and `@xyflow/react` are peer dependencies
+and are explicitly externalized from the bundle.
+
+## Manual Release
+
+Releases use Changesets and remain manual. Maintainers should:
+
+1. Run `pnpm changeset` while developing a change that should be released.
+2. Run `pnpm version` to apply pending version and changelog updates.
+3. Run `pnpm release` to rebuild the package and publish the prepared version.
+
+The repository does not configure automated npm publishing credentials.
