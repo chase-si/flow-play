@@ -1,6 +1,18 @@
-import { useMemo, useRef, useState } from "react";
+import { createElement, useMemo, useRef, useState } from "react";
+import type {
+  ButtonHTMLAttributes,
+  ChangeEvent,
+  HTMLAttributes,
+  MouseEvent,
+  SelectHTMLAttributes
+} from "react";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
-import { createFlowPlayback, type CreateFlowPlaybackOptions, type FlowPlaybackState } from "./index";
+import {
+  createFlowPlayback,
+  type CreateFlowPlaybackOptions,
+  type FlowPlaybackState,
+  type FlowPlaybackStep
+} from "./index";
 
 export interface FlowPlaybackDiagnostic {
   code: "unknown-node" | "unknown-edge";
@@ -27,6 +39,7 @@ export interface UseFlowPlaybackResult<
   EdgeData extends Record<string, unknown> = Record<string, unknown>,
   Metadata = Record<string, unknown>
 > extends FlowPlaybackState<Metadata> {
+  steps: readonly FlowPlaybackStep<Metadata>[];
   nodes: Node<NodeData & { flowPlayActive: boolean }>[];
   edges: Edge<EdgeData & { flowPlayActive: boolean }>[];
   activeNodeIds: string[];
@@ -125,6 +138,7 @@ export function useFlowPlayback<
 
   return {
     ...state,
+    steps,
     nodes: enhancedNodes,
     edges: enhancedEdges,
     activeNodeIds,
@@ -138,6 +152,242 @@ export function useFlowPlayback<
     goToStep: (stepId) => apply(latestPlayback.current.goToStep(stepId)),
     advanceBy: (elapsedMs) => apply(latestPlayback.current.advanceBy(elapsedMs))
   };
+}
+
+export interface FlowPlaybackControlLabels {
+  play?: string;
+  playAriaLabel?: string;
+  pause?: string;
+  pauseAriaLabel?: string;
+  previous?: string;
+  previousAriaLabel?: string;
+  next?: string;
+  nextAriaLabel?: string;
+  reset?: string;
+  resetAriaLabel?: string;
+  stepSelect?: string;
+  stepSelectAriaLabel?: string;
+}
+
+type FlowPlaybackControlPlayback<Metadata = Record<string, unknown>> = Pick<
+  UseFlowPlaybackResult<Record<string, unknown>, Record<string, unknown>, Metadata>,
+  | "currentStep"
+  | "currentStepIndex"
+  | "goToStep"
+  | "next"
+  | "pause"
+  | "play"
+  | "previous"
+  | "reset"
+  | "status"
+  | "stepCount"
+  | "steps"
+>;
+
+export interface FlowPlaybackControlProps<
+  Metadata = Record<string, unknown>
+> extends ButtonHTMLAttributes<HTMLButtonElement> {
+  labels?: FlowPlaybackControlLabels | undefined;
+  playback: FlowPlaybackControlPlayback<Metadata>;
+}
+
+export interface FlowPlaybackStepSelectProps<
+  Metadata = Record<string, unknown>
+> extends SelectHTMLAttributes<HTMLSelectElement> {
+  labels?: FlowPlaybackControlLabels | undefined;
+  playback: FlowPlaybackControlPlayback<Metadata>;
+}
+
+export interface FlowPlaybackControlsProps<
+  Metadata = Record<string, unknown>
+> extends HTMLAttributes<HTMLDivElement> {
+  labels?: FlowPlaybackControlLabels | undefined;
+  playback: FlowPlaybackControlPlayback<Metadata>;
+}
+
+const defaultControlLabels = {
+  play: "Play",
+  pause: "Pause",
+  previous: "Previous",
+  previousAriaLabel: "Previous step",
+  next: "Next",
+  nextAriaLabel: "Next step",
+  reset: "Reset",
+  resetAriaLabel: "Reset playback",
+  stepSelect: "Go to step"
+} satisfies Required<
+  Pick<FlowPlaybackControlLabels, "play" | "pause" | "previous" | "next" | "reset" | "stepSelect">
+> &
+  Pick<FlowPlaybackControlLabels, "previousAriaLabel" | "nextAriaLabel" | "resetAriaLabel">;
+
+export function FlowPlaybackPlayButton<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlProps<Metadata>
+) {
+  const { labels, playback, disabled = false, onClick, ...buttonProps } = props;
+  const label = labels?.play ?? defaultControlLabels.play;
+
+  return createElement(
+    "button",
+    {
+      type: "button",
+      ...buttonProps,
+      "aria-label": labels?.playAriaLabel ?? label,
+      disabled: disabled || playback.status === "playing" || playback.status === "completed",
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          playback.play();
+        }
+      }
+    },
+    label
+  );
+}
+
+export function FlowPlaybackPauseButton<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlProps<Metadata>
+) {
+  const { labels, playback, disabled = false, onClick, ...buttonProps } = props;
+  const label = labels?.pause ?? defaultControlLabels.pause;
+
+  return createElement(
+    "button",
+    {
+      type: "button",
+      ...buttonProps,
+      "aria-label": labels?.pauseAriaLabel ?? label,
+      disabled: disabled || playback.status !== "playing",
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          playback.pause();
+        }
+      }
+    },
+    label
+  );
+}
+
+export function FlowPlaybackPreviousButton<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlProps<Metadata>
+) {
+  const { labels, playback, disabled = false, onClick, ...buttonProps } = props;
+  const label = labels?.previous ?? defaultControlLabels.previous;
+
+  return createElement(
+    "button",
+    {
+      type: "button",
+      ...buttonProps,
+      "aria-label": labels?.previousAriaLabel ?? defaultControlLabels.previousAriaLabel,
+      disabled: disabled || playback.currentStepIndex === 0,
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          playback.previous();
+        }
+      }
+    },
+    label
+  );
+}
+
+export function FlowPlaybackNextButton<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlProps<Metadata>
+) {
+  const { labels, playback, disabled = false, onClick, ...buttonProps } = props;
+  const label = labels?.next ?? defaultControlLabels.next;
+
+  return createElement(
+    "button",
+    {
+      type: "button",
+      ...buttonProps,
+      "aria-label": labels?.nextAriaLabel ?? defaultControlLabels.nextAriaLabel,
+      disabled: disabled || playback.status === "completed",
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          playback.next();
+        }
+      }
+    },
+    label
+  );
+}
+
+export function FlowPlaybackResetButton<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlProps<Metadata>
+) {
+  const { labels, playback, disabled = false, onClick, ...buttonProps } = props;
+  const label = labels?.reset ?? defaultControlLabels.reset;
+
+  return createElement(
+    "button",
+    {
+      type: "button",
+      ...buttonProps,
+      "aria-label": labels?.resetAriaLabel ?? defaultControlLabels.resetAriaLabel,
+      disabled: disabled || (playback.status === "idle" && playback.currentStepIndex === 0),
+      onClick: (event: MouseEvent<HTMLButtonElement>) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          playback.reset();
+        }
+      }
+    },
+    label
+  );
+}
+
+export function FlowPlaybackStepSelect<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackStepSelectProps<Metadata>
+) {
+  const { labels, playback, disabled = false, id, onChange, ...selectProps } = props;
+  const label = labels?.stepSelect ?? defaultControlLabels.stepSelect;
+  const selectId = id ?? "flow-playback-step-select";
+
+  return createElement(
+    "label",
+    {},
+    label,
+    createElement(
+      "select",
+      {
+        ...selectProps,
+        "aria-label": labels?.stepSelectAriaLabel ?? label,
+        disabled,
+        id: selectId,
+        value: playback.currentStep.id,
+        onChange: (event: ChangeEvent<HTMLSelectElement>) => {
+          onChange?.(event);
+          if (!event.defaultPrevented) {
+            playback.goToStep(event.currentTarget.value);
+          }
+        }
+      },
+      playback.steps.map((step) =>
+        createElement("option", { key: step.id, value: step.id }, step.title)
+      )
+    )
+  );
+}
+
+export function FlowPlaybackControls<Metadata = Record<string, unknown>>(
+  props: FlowPlaybackControlsProps<Metadata>
+) {
+  const { labels, playback, ...containerProps } = props;
+
+  return createElement(
+    "div",
+    containerProps,
+    createElement(FlowPlaybackPlayButton, { labels, playback }),
+    createElement(FlowPlaybackPauseButton, { labels, playback }),
+    createElement(FlowPlaybackPreviousButton, { labels, playback }),
+    createElement(FlowPlaybackNextButton, { labels, playback }),
+    createElement(FlowPlaybackResetButton, { labels, playback }),
+    createElement(FlowPlaybackStepSelect, { labels, playback })
+  );
 }
 
 function collectDiagnostics<
