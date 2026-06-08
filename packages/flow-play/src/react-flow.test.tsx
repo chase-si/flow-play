@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from "@testing-library/react";
+import React from "react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
-import { useFlowPlayback } from "./react-flow";
+import { FlowPlaybackControls, useFlowPlayback } from "./react-flow";
 import type { FlowPlaybackStep } from "./index";
 
 const nodes: Node[] = [
@@ -193,9 +194,106 @@ describe("useFlowPlayback", () => {
   });
 });
 
+describe("FlowPlaybackControls", () => {
+  it("renders accessible unstyled controls that drive playback actions", () => {
+    render(React.createElement(PlaybackControlsHarness));
+
+    expect(button("Play").disabled).toBe(false);
+    expect(button("Pause").disabled).toBe(true);
+    expect(button("Previous step").disabled).toBe(true);
+    expect(button("Next step").disabled).toBe(false);
+    expect(button("Reset playback").disabled).toBe(true);
+    expect(select("Go to step").value).toBe("intro");
+
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(screen.getByTestId("playback-status").textContent).toBe("playing");
+    expect(button("Play").disabled).toBe(true);
+    expect(button("Pause").disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(screen.getByTestId("current-step").textContent).toBe("done");
+    expect(button("Previous step").disabled).toBe(false);
+    expect(button("Reset playback").disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Previous step" }));
+    expect(screen.getByTestId("current-step").textContent).toBe("intro");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Go to step" }), {
+      target: { value: "done" }
+    });
+    expect(screen.getByTestId("current-step").textContent).toBe("done");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    expect(screen.getByTestId("playback-status").textContent).toBe("completed");
+    expect(button("Next step").disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset playback" }));
+    expect(screen.getByTestId("playback-status").textContent).toBe("idle");
+    expect(screen.getByTestId("current-step").textContent).toBe("intro");
+  });
+
+  it("allows visible labels and aria labels to be customized", () => {
+    render(
+      React.createElement(PlaybackControlsHarness, {
+        labels: {
+          play: "Start",
+          playAriaLabel: "Start the tour",
+          pause: "Stop",
+          pauseAriaLabel: "Stop the tour",
+          previous: "Back",
+          previousAriaLabel: "Back one step",
+          next: "Forward",
+          nextAriaLabel: "Forward one step",
+          reset: "Restart",
+          resetAriaLabel: "Restart the tour",
+          stepSelect: "Jump",
+          stepSelectAriaLabel: "Jump to step"
+        }
+      })
+    );
+
+    expect(screen.getByRole("button", { name: "Start the tour" }).textContent).toBe("Start");
+    expect(screen.getByRole("button", { name: "Stop the tour" }).textContent).toBe("Stop");
+    expect(screen.getByRole("button", { name: "Back one step" }).textContent).toBe("Back");
+    expect(screen.getByRole("button", { name: "Forward one step" }).textContent).toBe("Forward");
+    expect(screen.getByRole("button", { name: "Restart the tour" }).textContent).toBe("Restart");
+    expect(screen.getByRole("combobox", { name: "Jump to step" })).toBeDefined();
+    expect(screen.getByText("Jump")).toBeDefined();
+  });
+});
+
 function createReactFlowViewport() {
   return {
     fitView: vi.fn(),
     setViewport: vi.fn()
   } as unknown as Pick<ReactFlowInstance, "fitView" | "setViewport">;
+}
+
+function button(name: string) {
+  return screen.getByRole("button", { name }) as HTMLButtonElement;
+}
+
+function select(name: string) {
+  return screen.getByRole("combobox", { name }) as HTMLSelectElement;
+}
+
+function PlaybackControlsHarness({
+  labels
+}: {
+  labels?: React.ComponentProps<typeof FlowPlaybackControls>["labels"];
+}) {
+  const playback = useFlowPlayback({
+    nodes,
+    edges,
+    steps,
+    defaultDurationMs: 1_000
+  });
+
+  return React.createElement(
+    "div",
+    {},
+    React.createElement(FlowPlaybackControls, { labels, playback }),
+    React.createElement("output", { "data-testid": "playback-status" }, playback.status),
+    React.createElement("output", { "data-testid": "current-step" }, playback.currentStep.id)
+  );
 }
