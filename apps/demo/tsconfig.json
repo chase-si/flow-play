@@ -5,6 +5,7 @@
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "paths": {
+      "flow-play/react-flow": ["../../packages/flow-play/src/react-flow.ts"],
       "flow-play": ["../../packages/flow-play/src/index.ts"]
     },
     "types": ["vitest/globals", "@testing-library/jest-dom"]
