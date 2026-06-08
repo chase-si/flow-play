@@ -1,4 +1,6 @@
-node_modules
+/node_modules
+/apps/demo/node_modules
+/packages/flow-play/node_modules
 dist
 coverage
 .DS_Store
