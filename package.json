@@ -14,11 +14,14 @@
     "package:check": "pnpm --filter flow-play build",
     "release": "pnpm package:check && pnpm dlx @changesets/cli publish",
     "test": "pnpm --recursive test",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "typecheck": "pnpm --recursive typecheck",
     "version": "pnpm dlx @changesets/cli version"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.60.0",
     "@types/node": "^24.10.1",
     "eslint": "^9.39.1",
     "prettier": "^3.6.2",
