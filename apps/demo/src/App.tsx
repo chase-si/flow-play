@@ -4,8 +4,10 @@ import {
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  addEdge,
   applyNodeChanges,
   useReactFlow,
+  type Connection,
   type Edge,
   type Node,
   type NodeChange
@@ -120,6 +122,19 @@ function PlaybackDemo() {
     const interval = window.setInterval(() => playback.advanceBy(250), 250);
     return () => window.clearInterval(interval);
   }, [playback]);
+
+  const onConnect = (connection: Connection) => {
+    const edge: Edge<DemoEdgeData> = {
+      ...connection,
+      id: `connect-${connection.source}-${connection.target}-${demoEdges.length + 1}`
+    };
+
+    setDemoEdges((currentEdges) => addEdge(edge, currentEdges));
+    playback.recordEdgeConnect({
+      edge: snapshotEdge(edge),
+      title: `Connect ${connection.source} to ${connection.target}`
+    });
+  };
 
   const flowNodes = useMemo(
     () =>
@@ -253,10 +268,10 @@ function PlaybackDemo() {
           edges={flowEdges}
           fitView
           nodes={flowNodes}
+          onConnect={onConnect}
           onNodesChange={onNodesChange}
           onNodeDragStart={(_, node) => playback.recordNodeDragStart(snapshotNode(node))}
           onNodeDragStop={(_, node) => playback.recordNodeDragStop(snapshotNode(node))}
-          nodesConnectable={false}
           panOnScroll
         >
           <Background />

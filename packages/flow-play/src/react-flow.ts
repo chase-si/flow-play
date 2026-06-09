@@ -18,6 +18,7 @@ import {
   type RecordNodeAddOptions,
   type RecordNodeDeleteOptions,
   type RecordNodeEditOptions,
+  type RecordEdgeConnectOptions,
   type RecordEdgeDeleteOptions
 } from "./index";
 
@@ -65,6 +66,7 @@ export interface UseFlowPlaybackResult<
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => void;
   recordNodeDelete: (options: RecordNodeDeleteOptions<Metadata>) => void;
   recordEdgeDelete: (options: RecordEdgeDeleteOptions<Metadata>) => void;
+  recordEdgeConnect: (options: RecordEdgeConnectOptions<Metadata>) => void;
   setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => void;
   deleteStep: (stepId: string) => void;
   advanceBy: (elapsedMs: number) => void;
@@ -229,6 +231,8 @@ export function useFlowPlayback<
       apply(latestPlayback.current.recordNodeDelete(recordOptions)),
     recordEdgeDelete: (recordOptions) =>
       apply(latestPlayback.current.recordEdgeDelete(recordOptions)),
+    recordEdgeConnect: (recordOptions) =>
+      apply(latestPlayback.current.recordEdgeConnect(recordOptions)),
     setStepPlaybackEnabled: (stepId, playbackEnabled) =>
       apply(latestPlayback.current.setStepPlaybackEnabled(stepId, playbackEnabled)),
     deleteStep: (stepId) => apply(latestPlayback.current.deleteStep(stepId)),
@@ -535,6 +539,7 @@ function getStepNodeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
     case "node-delete":
       return [step.node.id];
     case "edge-delete":
+    case "edge-connect":
       return [];
   }
 }
@@ -550,6 +555,7 @@ function getStepEdgeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
     case "node-delete":
       return step.connectedEdges.map((edge) => edge.id);
     case "edge-delete":
+    case "edge-connect":
       return [step.edge.id];
     case "node-drag":
     case "node-add":

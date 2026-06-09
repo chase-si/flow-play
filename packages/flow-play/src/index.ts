@@ -40,7 +40,8 @@ export type FlowStepType =
   | "node-add"
   | "node-edit"
   | "node-delete"
-  | "edge-delete";
+  | "edge-delete"
+  | "edge-connect";
 
 export interface FlowHighlightStep<Metadata = Record<string, unknown>> {
   id: string;
@@ -114,13 +115,25 @@ export interface FlowEdgeDeleteStep<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
+export interface FlowEdgeConnectStep<Metadata = Record<string, unknown>> {
+  id: string;
+  type: "edge-connect";
+  title: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  edge: FlowEdgeSnapshot;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
 export type FlowStep<Metadata = Record<string, unknown>> =
   | FlowHighlightStep<Metadata>
   | FlowNodeDragStep<Metadata>
   | FlowNodeAddStep<Metadata>
   | FlowNodeEditStep<Metadata>
   | FlowNodeDeleteStep<Metadata>
-  | FlowEdgeDeleteStep<Metadata>;
+  | FlowEdgeDeleteStep<Metadata>
+  | FlowEdgeConnectStep<Metadata>;
 
 export type FlowPlaybackStep<Metadata = Record<string, unknown>> = FlowStep<Metadata>;
 
@@ -209,6 +222,15 @@ export interface RecordEdgeDeleteOptions<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
+export interface RecordEdgeConnectOptions<Metadata = Record<string, unknown>> {
+  edge: FlowEdgeSnapshot;
+  title?: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
 export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   getState: () => FlowPlaybackState<Metadata>;
   getSteps: () => FlowStep<Metadata>[];
@@ -218,6 +240,7 @@ export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordNodeDelete: (options: RecordNodeDeleteOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordEdgeDelete: (options: RecordEdgeDeleteOptions<Metadata>) => FlowPlaybackState<Metadata>;
+  recordEdgeConnect: (options: RecordEdgeConnectOptions<Metadata>) => FlowPlaybackState<Metadata>;
   play: () => FlowPlaybackState<Metadata>;
   pause: () => FlowPlaybackState<Metadata>;
   next: () => FlowPlaybackState<Metadata>;
@@ -483,6 +506,24 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 
       return appendStep(step);
     },
+    recordEdgeConnect: (recordOptions) => {
+      const step = {
+        id: createRecordedStepId("edge-connect", recordOptions.edge.id, historySteps.length + 1),
+        type: "edge-connect",
+        title: recordOptions.title ?? `Connect ${recordOptions.edge.id}`,
+        edge: recordOptions.edge,
+        ...(recordOptions.description === undefined
+          ? {}
+          : { description: recordOptions.description }),
+        ...(recordOptions.playbackEnabled === undefined
+          ? {}
+          : { playbackEnabled: recordOptions.playbackEnabled }),
+        ...(recordOptions.durationMs === undefined ? {} : { durationMs: recordOptions.durationMs }),
+        ...(recordOptions.metadata === undefined ? {} : { metadata: recordOptions.metadata })
+      } satisfies FlowEdgeConnectStep<Metadata>;
+
+      return appendStep(step);
+    },
     play: () => {
       const playbackQueue = getPlaybackQueue();
 
@@ -669,6 +710,8 @@ function getStepTypeLabel(type: FlowStepType) {
       return "Node delete";
     case "edge-delete":
       return "Edge delete";
+    case "edge-connect":
+      return "Edge connect";
   }
 }
 
@@ -736,6 +779,9 @@ function validateStep<Metadata>(step: FlowStep<Metadata>, existingStepIds: Set<s
       );
       break;
     case "edge-delete":
+      validateEdgeSnapshot(step.id, "edge", step.edge);
+      break;
+    case "edge-connect":
       validateEdgeSnapshot(step.id, "edge", step.edge);
       break;
   }
