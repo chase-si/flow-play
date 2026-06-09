@@ -9,10 +9,14 @@ export interface FlowPlaybackViewportIntent {
   padding?: number;
 }
 
-export interface FlowPlaybackStep<Metadata = Record<string, unknown>> {
+export type FlowStepType = "highlight";
+
+export interface FlowHighlightStep<Metadata = Record<string, unknown>> {
   id: string;
+  type: "highlight";
   title: string;
   description?: string;
+  playbackEnabled?: boolean;
   nodeIds: readonly string[];
   edgeIds: readonly string[];
   viewport?: FlowPlaybackViewportIntent;
@@ -20,14 +24,22 @@ export interface FlowPlaybackStep<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
+export type FlowStep<Metadata = Record<string, unknown>> = FlowHighlightStep<Metadata>;
+
+export type FlowPlaybackStep<Metadata = Record<string, unknown>> = FlowStep<Metadata>;
+
+export interface FlowPlay<Metadata = Record<string, unknown>> {
+  steps: readonly FlowStep<Metadata>[];
+}
+
 export interface FlowPlaybackPreview {
-  initialStepId: string;
+  initialStepId: string | undefined;
   status: "idle";
   stepCount: number;
 }
 
 export interface FlowPlaybackState<Metadata = Record<string, unknown>> {
-  currentStep: FlowPlaybackStep<Metadata>;
+  currentStep: FlowStep<Metadata> | undefined;
   currentStepIndex: number;
   elapsedMs: number;
   status: FlowPlaybackStatus;
@@ -36,10 +48,10 @@ export interface FlowPlaybackState<Metadata = Record<string, unknown>> {
 }
 
 export interface CreateFlowPlaybackOptions<Metadata = Record<string, unknown>> {
-  steps: readonly FlowPlaybackStep<Metadata>[];
+  steps: readonly FlowStep<Metadata>[];
   defaultDurationMs: number;
   onStatusChange?: (status: FlowPlaybackStatus, state: FlowPlaybackState<Metadata>) => void;
-  onStepChange?: (step: FlowPlaybackStep<Metadata>, state: FlowPlaybackState<Metadata>) => void;
+  onStepChange?: (step: FlowStep<Metadata>, state: FlowPlaybackState<Metadata>) => void;
 }
 
 export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
@@ -61,18 +73,15 @@ export class FlowPlaybackError extends Error {
 }
 
 export function createFlowPlaybackPreview(
-  steps: readonly Pick<FlowPlaybackStep, "id">[]
+  steps: readonly Pick<FlowStep, "id" | "playbackEnabled">[]
 ): FlowPlaybackPreview {
-  const firstStep = steps[0];
-
-  if (!firstStep) {
-    throw new FlowPlaybackError("Flow playback requires at least one step.");
-  }
+  const playbackQueue = projectPlaybackQueue(steps);
+  const firstStep = playbackQueue[0];
 
   return {
-    initialStepId: firstStep.id,
+    initialStepId: firstStep?.id,
     status: "idle",
-    stepCount: steps.length
+    stepCount: playbackQueue.length
   };
 }
 
@@ -82,28 +91,23 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
   validateOptions(options);
 
   const { steps, defaultDurationMs, onStatusChange, onStepChange } = options;
-  let currentStepIndex = 0;
+  const playbackQueue = projectPlaybackQueue(steps);
+  let currentStepIndex = playbackQueue.length === 0 ? -1 : 0;
   let elapsedMs = 0;
   let status: FlowPlaybackStatus = "idle";
 
   const getCurrentStep = () => {
-    const currentStep = steps[currentStepIndex];
-
-    if (!currentStep) {
-      throw new FlowPlaybackError(`Flow playback step index ${currentStepIndex} does not exist.`);
-    }
-
-    return currentStep;
+    return playbackQueue[currentStepIndex];
   };
 
-  const getStepDurationMs = () => getCurrentStep().durationMs ?? defaultDurationMs;
+  const getStepDurationMs = () => getCurrentStep()?.durationMs ?? (getCurrentStep() ? defaultDurationMs : 0);
 
   const getState = (): FlowPlaybackState<Metadata> => ({
     currentStep: getCurrentStep(),
     currentStepIndex,
     elapsedMs,
     status,
-    stepCount: steps.length,
+    stepCount: playbackQueue.length,
     stepDurationMs: getStepDurationMs()
   });
 
@@ -127,7 +131,9 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
     currentStepIndex = nextStepIndex;
     elapsedMs = 0;
     const state = getState();
-    onStepChange?.(state.currentStep, state);
+    if (state.currentStep) {
+      onStepChange?.(state.currentStep, state);
+    }
     return state;
   };
 
@@ -136,28 +142,32 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
   return {
     getState,
     play: () => {
-      if (status === "completed") {
+      if (status === "completed" || playbackQueue.length === 0) {
         return getState();
       }
 
       return setStatus("playing");
     },
     pause: () => {
-      if (status === "completed") {
+      if (status === "completed" || playbackQueue.length === 0) {
         return getState();
       }
 
       return setStatus("paused");
     },
     next: () => {
-      if (currentStepIndex >= steps.length - 1) {
+      if (playbackQueue.length === 0) {
+        return getState();
+      }
+
+      if (currentStepIndex >= playbackQueue.length - 1) {
         return complete();
       }
 
       return moveToStep(currentStepIndex + 1);
     },
     previous: () => {
-      if (currentStepIndex === 0) {
+      if (playbackQueue.length === 0 || currentStepIndex === 0) {
         elapsedMs = 0;
         return getState();
       }
@@ -169,13 +179,13 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return moveToStep(currentStepIndex - 1);
     },
     reset: () => {
-      currentStepIndex = 0;
+      currentStepIndex = playbackQueue.length === 0 ? -1 : 0;
       elapsedMs = 0;
       status = "idle";
       return getState();
     },
     goToStep: (stepId: string) => {
-      const nextStepIndex = steps.findIndex((step) => step.id === stepId);
+      const nextStepIndex = playbackQueue.findIndex((step) => step.id === stepId);
 
       if (nextStepIndex === -1) {
         throw new FlowPlaybackError(`Flow playback step "${stepId}" does not exist.`);
@@ -210,7 +220,7 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
         remainingMs -= consumedMs;
         elapsedMs = stepDurationMs;
 
-        if (currentStepIndex >= steps.length - 1) {
+        if (currentStepIndex >= playbackQueue.length - 1) {
           complete();
           remainingMs = 0;
           continue;
@@ -225,10 +235,6 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 }
 
 function validateOptions<Metadata>(options: CreateFlowPlaybackOptions<Metadata>) {
-  if (options.steps.length === 0) {
-    throw new FlowPlaybackError("Flow playback requires at least one step.");
-  }
-
   if (!Number.isFinite(options.defaultDurationMs) || options.defaultDurationMs <= 0) {
     throw new FlowPlaybackError("Flow playback defaultDurationMs must be greater than 0.");
   }
@@ -238,6 +244,10 @@ function validateOptions<Metadata>(options: CreateFlowPlaybackOptions<Metadata>)
   for (const step of options.steps) {
     if (step.id.length === 0) {
       throw new FlowPlaybackError("Flow playback step IDs must not be empty.");
+    }
+
+    if (step.type !== "highlight") {
+      throw new FlowPlaybackError(`Flow playback step "${step.id}" type must be "highlight".`);
     }
 
     if (step.title.length === 0) {
@@ -269,4 +279,10 @@ function validateOptions<Metadata>(options: CreateFlowPlaybackOptions<Metadata>)
       );
     }
   }
+}
+
+function projectPlaybackQueue<Step extends Pick<FlowStep, "playbackEnabled">>(
+  steps: readonly Step[]
+) {
+  return steps.filter((step) => step.playbackEnabled !== false);
 }

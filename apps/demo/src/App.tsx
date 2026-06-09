@@ -58,6 +58,7 @@ const edges = [
 const steps = [
   {
     id: "collect",
+    type: "highlight",
     title: "Collect request context",
     description: "Capture the customer signal and prepare the handoff path.",
     nodeIds: ["request"],
@@ -66,6 +67,7 @@ const steps = [
   },
   {
     id: "validate",
+    type: "highlight",
     title: "Validate routing conditions",
     description: "Check plan fit, risk, and required reviewer context.",
     nodeIds: ["triage", "review"],
@@ -74,6 +76,7 @@ const steps = [
   },
   {
     id: "handoff",
+    type: "highlight",
     title: "Complete the handoff",
     description: "Confirm the next owner and leave a replayable decision trail.",
     nodeIds: ["handoff"],
@@ -169,10 +172,10 @@ function PlaybackDemo() {
           {steps.map((step, index) => (
             <li key={step.id}>
               <button
-                aria-current={playback.currentStep.id === step.id ? "step" : undefined}
+                aria-current={playback.currentStep?.id === step.id ? "step" : undefined}
                 aria-label={step.title}
                 className={
-                  playback.currentStep.id === step.id ? "step-button active" : "step-button"
+                  playback.currentStep?.id === step.id ? "step-button active" : "step-button"
                 }
                 onClick={() => playback.goToStep(step.id)}
                 type="button"
@@ -221,13 +224,15 @@ function edgeDomAttributes(id: string, isActive: boolean) {
 }
 
 function CurrentStep({ playback }: { playback: DemoPlayback }) {
+  const currentStep = playback.currentStep;
+
   return (
     <article className="current-step" aria-live="polite">
       <p className="step-count">
         Step {playback.currentStepIndex + 1} of {playback.stepCount}
       </p>
-      <h2>{playback.currentStep.title}</h2>
-      <p>{playback.currentStep.description}</p>
+      <h2>{currentStep?.title ?? "No playback steps enabled"}</h2>
+      <p>{currentStep?.description ?? "Enable a timeline step to start playback."}</p>
       <div className="active-path">
         <span>{playback.status}</span>
         <span>{playback.activeNodeIds.join(", ")}</span>

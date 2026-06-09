@@ -3,6 +3,8 @@ import {
   createFlowPlayback,
   createFlowPlaybackPreview,
   FlowPlaybackError,
+  type FlowPlay,
+  type FlowStep,
   type FlowPlaybackStep
 } from "./index";
 
@@ -13,6 +15,7 @@ interface DemoMetadata {
 const steps: FlowPlaybackStep<DemoMetadata>[] = [
   {
     id: "intro",
+    type: "highlight",
     title: "Introduce the path",
     description: "Explain why this path matters.",
     nodeIds: ["start"],
@@ -23,6 +26,7 @@ const steps: FlowPlaybackStep<DemoMetadata>[] = [
   },
   {
     id: "review",
+    type: "highlight",
     title: "Review the branch",
     nodeIds: ["review"],
     edgeIds: ["review-finish"],
@@ -30,12 +34,43 @@ const steps: FlowPlaybackStep<DemoMetadata>[] = [
   },
   {
     id: "finish",
+    type: "highlight",
     title: "Complete the path",
     nodeIds: ["finish"],
     edgeIds: [],
     metadata: { tone: "success" }
   }
 ];
+
+const timeline: FlowPlay<DemoMetadata> = {
+  steps: [
+    {
+      id: "intro",
+      type: "highlight",
+      title: "Introduce the path",
+      nodeIds: ["start"],
+      edgeIds: ["start-review"],
+      metadata: { tone: "intro" }
+    },
+    {
+      id: "notes",
+      type: "highlight",
+      title: "Static guide notes",
+      playbackEnabled: false,
+      nodeIds: ["review"],
+      edgeIds: ["review-finish"],
+      metadata: { tone: "warning" }
+    },
+    {
+      id: "finish",
+      type: "highlight",
+      title: "Complete the path",
+      nodeIds: ["finish"],
+      edgeIds: [],
+      metadata: { tone: "success" }
+    }
+  ]
+};
 
 describe("createFlowPlaybackPreview", () => {
   it("summarizes the first playable step through the public package API", () => {
@@ -50,6 +85,48 @@ describe("createFlowPlaybackPreview", () => {
 });
 
 describe("createFlowPlayback", () => {
+  it("projects enabled highlight steps into the playback queue", () => {
+    const playback = createFlowPlayback({ steps: timeline.steps, defaultDurationMs: 1_000 });
+
+    expect(playback.getState()).toMatchObject({
+      currentStep: timeline.steps[0],
+      currentStepIndex: 0,
+      stepCount: 2,
+      status: "idle"
+    });
+
+    expect(playback.next()).toMatchObject({
+      currentStep: timeline.steps[2],
+      currentStepIndex: 1,
+      stepCount: 2
+    });
+  });
+
+  it("supports an empty enabled playback queue without throwing", () => {
+    const disabledSteps: FlowStep[] = [
+      {
+        id: "notes",
+        type: "highlight",
+        title: "Static guide notes",
+        playbackEnabled: false,
+        nodeIds: ["review"],
+        edgeIds: []
+      }
+    ];
+    const playback = createFlowPlayback({ steps: disabledSteps, defaultDurationMs: 1_000 });
+
+    expect(playback.getState()).toEqual({
+      currentStep: undefined,
+      currentStepIndex: -1,
+      elapsedMs: 0,
+      status: "idle",
+      stepCount: 0,
+      stepDurationMs: 0
+    });
+    expect(playback.play().status).toBe("idle");
+    expect(playback.next().currentStep).toBeUndefined();
+  });
+
   it("exposes serializable step definitions and non-controlled playback state", () => {
     const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
 
@@ -67,9 +144,9 @@ describe("createFlowPlayback", () => {
     const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
 
     expect(playback.play().status).toBe("playing");
-    expect(playback.next().currentStep.id).toBe("review");
+    expect(playback.next().currentStep?.id).toBe("review");
     expect(playback.pause().status).toBe("paused");
-    expect(playback.previous().currentStep.id).toBe("intro");
+    expect(playback.previous().currentStep?.id).toBe("intro");
     expect(playback.goToStep("finish").currentStepIndex).toBe(2);
     expect(playback.reset()).toMatchObject({
       currentStep: steps[0],
@@ -150,14 +227,11 @@ describe("createFlowPlayback", () => {
   });
 
   it("validates invalid core configuration with clear errors", () => {
-    expect(() => createFlowPlayback({ steps: [], defaultDurationMs: 1_000 })).toThrow(
-      new FlowPlaybackError("Flow playback requires at least one step.")
-    );
     expect(() =>
       createFlowPlayback({
         steps: [
-          { id: "duplicate", title: "First", nodeIds: [], edgeIds: [] },
-          { id: "duplicate", title: "Second", nodeIds: [], edgeIds: [] }
+          { id: "duplicate", type: "highlight", title: "First", nodeIds: [], edgeIds: [] },
+          { id: "duplicate", type: "highlight", title: "Second", nodeIds: [], edgeIds: [] }
         ],
         defaultDurationMs: 1_000
       })
@@ -170,7 +244,14 @@ describe("createFlowPlayback", () => {
     expect(() =>
       createFlowPlayback({
         steps: [
-          { id: "invalid-duration", title: "Invalid", nodeIds: [], edgeIds: [], durationMs: -1 }
+          {
+            id: "invalid-duration",
+            type: "highlight",
+            title: "Invalid",
+            nodeIds: [],
+            edgeIds: [],
+            durationMs: -1
+          }
         ],
         defaultDurationMs: 1_000
       })
@@ -184,7 +265,7 @@ describe("createFlowPlayback", () => {
     ).toThrow(new FlowPlaybackError('Flow playback step "missing" does not exist.'));
     expect(() =>
       createFlowPlayback({
-        steps: [{ id: "missing-title", title: "", nodeIds: [], edgeIds: [] }],
+        steps: [{ id: "missing-title", type: "highlight", title: "", nodeIds: [], edgeIds: [] }],
         defaultDurationMs: 1_000
       })
     ).toThrow(new FlowPlaybackError('Flow playback step "missing-title" title must not be empty.'));
@@ -193,6 +274,7 @@ describe("createFlowPlayback", () => {
         steps: [
           {
             id: "invalid-refs",
+            type: "highlight",
             title: "Invalid refs",
             nodeIds: "node-a",
             edgeIds: []
