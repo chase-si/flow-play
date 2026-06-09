@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import React from "react";
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import { FlowPlaybackControls, useFlowPlayback } from "./react-flow";
@@ -17,12 +17,14 @@ const edges: Edge[] = [{ id: "start-finish", source: "start", target: "finish" }
 const steps: FlowPlaybackStep[] = [
   {
     id: "intro",
+    type: "highlight",
     title: "Introduce the path",
     nodeIds: ["start"],
     edgeIds: ["start-finish"]
   },
   {
     id: "done",
+    type: "highlight",
     title: "Finish the path",
     nodeIds: ["finish"],
     edgeIds: []
@@ -78,7 +80,7 @@ describe("useFlowPlayback", () => {
     act(() => result.current.play());
     act(() => result.current.next());
 
-    expect(result.current.currentStep.id).toBe("done");
+    expect(result.current.currentStep?.id).toBe("done");
     expect(result.current.activeNodeIds).toEqual(["finish"]);
     expect(result.current.activeEdgeIds).toEqual([]);
     expect(onStatusChange).toHaveBeenCalledWith(
@@ -99,6 +101,7 @@ describe("useFlowPlayback", () => {
         steps: [
           {
             id: "missing-refs",
+            type: "highlight",
             title: "Missing refs",
             nodeIds: ["missing-node"],
             edgeIds: ["missing-edge"]
@@ -132,6 +135,7 @@ describe("useFlowPlayback", () => {
       introStep,
       {
         id: "focus-finish",
+        type: "highlight",
         title: "Focus finish",
         nodeIds: ["finish"],
         edgeIds: [],
@@ -160,6 +164,7 @@ describe("useFlowPlayback", () => {
       introStep,
       {
         id: "focus-finish",
+        type: "highlight",
         title: "Focus finish",
         nodeIds: ["finish"],
         edgeIds: [],
@@ -167,6 +172,7 @@ describe("useFlowPlayback", () => {
       },
       {
         id: "pan",
+        type: "highlight",
         title: "Pan",
         nodeIds: [],
         edgeIds: [],
@@ -232,6 +238,35 @@ describe("FlowPlaybackControls", () => {
     expect(screen.getByTestId("current-step").textContent).toBe("intro");
   });
 
+  it("disables controls and hides disabled timeline steps when no playback steps are enabled", () => {
+    const { container } = render(
+      React.createElement(PlaybackControlsHarness, { playbackEnabled: false })
+    );
+    const rendered = within(container);
+
+    expect((rendered.getByRole("button", { name: "Play" }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
+    expect((rendered.getByRole("button", { name: "Pause" }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
+    expect(
+      (rendered.getByRole("button", { name: "Previous step" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(
+      (rendered.getByRole("button", { name: "Next step" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    expect(
+      (rendered.getByRole("button", { name: "Reset playback" }) as HTMLButtonElement).disabled
+    ).toBe(true);
+    const stepSelect = rendered.getByRole("combobox", { name: "Go to step" }) as HTMLSelectElement;
+    expect(stepSelect.disabled).toBe(true);
+    expect(stepSelect.value).toBe("");
+    expect(rendered.getByTestId("playback-status").textContent).toBe("idle");
+    expect(rendered.getByTestId("current-step").textContent).toBe("none");
+    expect(rendered.queryByRole("option", { name: "Introduce the path" })).toBeNull();
+  });
+
   it("allows visible labels and aria labels to be customized", () => {
     render(
       React.createElement(PlaybackControlsHarness, {
@@ -278,14 +313,19 @@ function select(name: string) {
 }
 
 function PlaybackControlsHarness({
-  labels
+  labels,
+  playbackEnabled = true
 }: {
   labels?: React.ComponentProps<typeof FlowPlaybackControls>["labels"];
+  playbackEnabled?: boolean;
 }) {
+  const harnessSteps = playbackEnabled
+    ? steps
+    : steps.map((step) => ({ ...step, playbackEnabled: false }));
   const playback = useFlowPlayback({
     nodes,
     edges,
-    steps,
+    steps: harnessSteps,
     defaultDurationMs: 1_000
   });
 
@@ -294,6 +334,6 @@ function PlaybackControlsHarness({
     {},
     React.createElement(FlowPlaybackControls, { labels, playback }),
     React.createElement("output", { "data-testid": "playback-status" }, playback.status),
-    React.createElement("output", { "data-testid": "current-step" }, playback.currentStep.id)
+    React.createElement("output", { "data-testid": "current-step" }, playback.currentStep?.id ?? "none")
   );
 }

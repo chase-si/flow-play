@@ -63,6 +63,10 @@ export function useFlowPlayback<
 ): UseFlowPlaybackResult<NodeData, EdgeData, Metadata> {
   const { nodes, edges, steps, defaultDurationMs, onStatusChange, onStepChange } = options;
   const viewport = options.viewport;
+  const playbackSteps = useMemo(
+    () => steps.filter((step) => step.playbackEnabled !== false),
+    [steps]
+  );
   const playback = useMemo(
     () =>
       createFlowPlayback({
@@ -77,8 +81,14 @@ export function useFlowPlayback<
   const latestPlayback = useRef(playback);
   latestPlayback.current = playback;
 
-  const activeNodeIds = useMemo(() => [...state.currentStep.nodeIds], [state.currentStep.nodeIds]);
-  const activeEdgeIds = useMemo(() => [...state.currentStep.edgeIds], [state.currentStep.edgeIds]);
+  const activeNodeIds = useMemo(
+    () => [...(state.currentStep?.nodeIds ?? [])],
+    [state.currentStep]
+  );
+  const activeEdgeIds = useMemo(
+    () => [...(state.currentStep?.edgeIds ?? [])],
+    [state.currentStep]
+  );
   const activeNodeIdSet = useMemo(() => new Set(activeNodeIds), [activeNodeIds]);
   const activeEdgeIdSet = useMemo(() => new Set(activeEdgeIds), [activeEdgeIds]);
 
@@ -106,12 +116,15 @@ export function useFlowPlayback<
   );
 
   const diagnostics = useMemo(
-    () => collectDiagnostics(nodes, edges, state.currentStep.id, activeNodeIds, activeEdgeIds),
-    [activeEdgeIds, activeNodeIds, edges, nodes, state.currentStep.id]
+    () =>
+      state.currentStep
+        ? collectDiagnostics(nodes, edges, state.currentStep.id, activeNodeIds, activeEdgeIds)
+        : [],
+    [activeEdgeIds, activeNodeIds, edges, nodes, state.currentStep]
   );
 
   const applyViewport = (nextState: FlowPlaybackState<Metadata>) => {
-    if (viewport?.enabled !== true || !viewport.reactFlow || !nextState.currentStep.viewport) {
+    if (viewport?.enabled !== true || !viewport.reactFlow || !nextState.currentStep?.viewport) {
       return;
     }
 
@@ -138,7 +151,7 @@ export function useFlowPlayback<
 
   return {
     ...state,
-    steps,
+    steps: playbackSteps,
     nodes: enhancedNodes,
     edges: enhancedEdges,
     activeNodeIds,
@@ -232,7 +245,11 @@ export function FlowPlaybackPlayButton<Metadata = Record<string, unknown>>(
       type: "button",
       ...buttonProps,
       "aria-label": labels?.playAriaLabel ?? label,
-      disabled: disabled || playback.status === "playing" || playback.status === "completed",
+      disabled:
+        disabled ||
+        playback.stepCount === 0 ||
+        playback.status === "playing" ||
+        playback.status === "completed",
       onClick: (event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -256,7 +273,7 @@ export function FlowPlaybackPauseButton<Metadata = Record<string, unknown>>(
       type: "button",
       ...buttonProps,
       "aria-label": labels?.pauseAriaLabel ?? label,
-      disabled: disabled || playback.status !== "playing",
+      disabled: disabled || playback.stepCount === 0 || playback.status !== "playing",
       onClick: (event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -280,7 +297,7 @@ export function FlowPlaybackPreviousButton<Metadata = Record<string, unknown>>(
       type: "button",
       ...buttonProps,
       "aria-label": labels?.previousAriaLabel ?? defaultControlLabels.previousAriaLabel,
-      disabled: disabled || playback.currentStepIndex === 0,
+      disabled: disabled || playback.stepCount === 0 || playback.currentStepIndex <= 0,
       onClick: (event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -304,7 +321,7 @@ export function FlowPlaybackNextButton<Metadata = Record<string, unknown>>(
       type: "button",
       ...buttonProps,
       "aria-label": labels?.nextAriaLabel ?? defaultControlLabels.nextAriaLabel,
-      disabled: disabled || playback.status === "completed",
+      disabled: disabled || playback.stepCount === 0 || playback.status === "completed",
       onClick: (event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -328,7 +345,10 @@ export function FlowPlaybackResetButton<Metadata = Record<string, unknown>>(
       type: "button",
       ...buttonProps,
       "aria-label": labels?.resetAriaLabel ?? defaultControlLabels.resetAriaLabel,
-      disabled: disabled || (playback.status === "idle" && playback.currentStepIndex === 0),
+      disabled:
+        disabled ||
+        playback.stepCount === 0 ||
+        (playback.status === "idle" && playback.currentStepIndex === 0),
       onClick: (event: MouseEvent<HTMLButtonElement>) => {
         onClick?.(event);
         if (!event.defaultPrevented) {
@@ -356,9 +376,9 @@ export function FlowPlaybackStepSelect<Metadata = Record<string, unknown>>(
       {
         ...selectProps,
         "aria-label": labels?.stepSelectAriaLabel ?? label,
-        disabled,
+        disabled: disabled || playback.stepCount === 0,
         id: selectId,
-        value: playback.currentStep.id,
+        value: playback.currentStep?.id ?? "",
         onChange: (event: ChangeEvent<HTMLSelectElement>) => {
           onChange?.(event);
           if (!event.defaultPrevented) {
