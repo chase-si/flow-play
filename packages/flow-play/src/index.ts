@@ -9,7 +9,24 @@ export interface FlowPlaybackViewportIntent {
   padding?: number;
 }
 
-export type FlowStepType = "highlight";
+export interface FlowNodePosition {
+  x: number;
+  y: number;
+}
+
+export interface FlowNodeSnapshot {
+  id: string;
+  position?: FlowNodePosition;
+  data?: unknown;
+  [key: string]: unknown;
+}
+
+export interface FlowNodeLabelReference {
+  id: string;
+  data?: unknown;
+}
+
+export type FlowStepType = "highlight" | "node-drag" | "node-add" | "node-edit";
 
 export interface FlowHighlightStep<Metadata = Record<string, unknown>> {
   id: string;
@@ -24,7 +41,47 @@ export interface FlowHighlightStep<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
-export type FlowStep<Metadata = Record<string, unknown>> = FlowHighlightStep<Metadata>;
+export interface FlowNodeDragStep<Metadata = Record<string, unknown>> {
+  id: string;
+  type: "node-drag";
+  title: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  nodeId: string;
+  from: FlowNodePosition;
+  to: FlowNodePosition;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
+export interface FlowNodeAddStep<Metadata = Record<string, unknown>> {
+  id: string;
+  type: "node-add";
+  title: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  node: FlowNodeSnapshot;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
+export interface FlowNodeEditStep<Metadata = Record<string, unknown>> {
+  id: string;
+  type: "node-edit";
+  title: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  before: FlowNodeSnapshot;
+  after: FlowNodeSnapshot;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
+export type FlowStep<Metadata = Record<string, unknown>> =
+  | FlowHighlightStep<Metadata>
+  | FlowNodeDragStep<Metadata>
+  | FlowNodeAddStep<Metadata>
+  | FlowNodeEditStep<Metadata>;
 
 export type FlowPlaybackStep<Metadata = Record<string, unknown>> = FlowStep<Metadata>;
 
@@ -58,13 +115,49 @@ export interface FlowStepListItem {
 export interface CreateFlowPlaybackOptions<Metadata = Record<string, unknown>> {
   steps: readonly FlowStep<Metadata>[];
   defaultDurationMs: number;
+  formatNodeLabel?: (node: FlowNodeLabelReference) => string | undefined;
+  stepTypeLabels?: Partial<Record<FlowStepType, string>>;
   onStatusChange?: (status: FlowPlaybackStatus, state: FlowPlaybackState<Metadata>) => void;
   onStepChange?: (step: FlowStep<Metadata>, state: FlowPlaybackState<Metadata>) => void;
 }
 
+export interface RecordNodeDragOptions<Metadata = Record<string, unknown>> {
+  nodeId: string;
+  from: FlowNodePosition;
+  to: FlowNodePosition;
+  title?: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
+export interface RecordNodeAddOptions<Metadata = Record<string, unknown>> {
+  node: FlowNodeSnapshot;
+  title?: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
+export interface RecordNodeEditOptions<Metadata = Record<string, unknown>> {
+  before: FlowNodeSnapshot;
+  after: FlowNodeSnapshot;
+  title?: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
 export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   getState: () => FlowPlaybackState<Metadata>;
+  getSteps: () => FlowStep<Metadata>[];
   getStepList: () => FlowStepListItem[];
+  recordNodeDrag: (options: RecordNodeDragOptions<Metadata>) => FlowPlaybackState<Metadata>;
+  recordNodeAdd: (options: RecordNodeAddOptions<Metadata>) => FlowPlaybackState<Metadata>;
+  recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => FlowPlaybackState<Metadata>;
   play: () => FlowPlaybackState<Metadata>;
   pause: () => FlowPlaybackState<Metadata>;
   next: () => FlowPlaybackState<Metadata>;
@@ -101,7 +194,7 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 ): FlowPlaybackController<Metadata> {
   validateOptions(options);
 
-  const { steps, defaultDurationMs, onStatusChange, onStepChange } = options;
+  const { steps, defaultDurationMs, formatNodeLabel, onStatusChange, onStepChange } = options;
   let historySteps = [...steps];
   let currentStepId = projectPlaybackQueue(historySteps)[0]?.id;
   let elapsedMs = 0;
@@ -144,7 +237,10 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
     };
   };
 
-  const getStepList = () => historySteps.map(projectStepListItem);
+  const getSteps = () => [...historySteps];
+
+  const getStepList = () =>
+    historySteps.map((step) => projectStepListItem(step, options.stepTypeLabels));
 
   const setStatus = (nextStatus: FlowPlaybackStatus) => {
     if (status === nextStatus) {
@@ -221,7 +317,72 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 
   return {
     getState,
+    getSteps,
     getStepList,
+    recordNodeDrag: (recordOptions) => {
+      const label = formatNodeLabel?.({ id: recordOptions.nodeId }) ?? recordOptions.nodeId;
+      const step = {
+        id: createRecordedStepId("node-drag", recordOptions.nodeId, historySteps.length + 1),
+        type: "node-drag",
+        title: recordOptions.title ?? `Move ${label}`,
+        nodeId: recordOptions.nodeId,
+        from: recordOptions.from,
+        to: recordOptions.to,
+        ...(recordOptions.description === undefined
+          ? {}
+          : { description: recordOptions.description }),
+        ...(recordOptions.playbackEnabled === undefined
+          ? {}
+          : { playbackEnabled: recordOptions.playbackEnabled }),
+        ...(recordOptions.durationMs === undefined ? {} : { durationMs: recordOptions.durationMs }),
+        ...(recordOptions.metadata === undefined ? {} : { metadata: recordOptions.metadata })
+      } satisfies FlowNodeDragStep<Metadata>;
+
+      return appendStep(step);
+    },
+    recordNodeAdd: (recordOptions) => {
+      const label =
+        formatNodeLabel?.({ id: recordOptions.node.id, data: recordOptions.node.data }) ??
+        recordOptions.node.id;
+      const step = {
+        id: createRecordedStepId("node-add", recordOptions.node.id, historySteps.length + 1),
+        type: "node-add",
+        title: recordOptions.title ?? `Add ${label}`,
+        node: recordOptions.node,
+        ...(recordOptions.description === undefined
+          ? {}
+          : { description: recordOptions.description }),
+        ...(recordOptions.playbackEnabled === undefined
+          ? {}
+          : { playbackEnabled: recordOptions.playbackEnabled }),
+        ...(recordOptions.durationMs === undefined ? {} : { durationMs: recordOptions.durationMs }),
+        ...(recordOptions.metadata === undefined ? {} : { metadata: recordOptions.metadata })
+      } satisfies FlowNodeAddStep<Metadata>;
+
+      return appendStep(step);
+    },
+    recordNodeEdit: (recordOptions) => {
+      const label =
+        formatNodeLabel?.({ id: recordOptions.after.id, data: recordOptions.after.data }) ??
+        recordOptions.after.id;
+      const step = {
+        id: createRecordedStepId("node-edit", recordOptions.after.id, historySteps.length + 1),
+        type: "node-edit",
+        title: recordOptions.title ?? `Edit ${label}`,
+        before: recordOptions.before,
+        after: recordOptions.after,
+        ...(recordOptions.description === undefined
+          ? {}
+          : { description: recordOptions.description }),
+        ...(recordOptions.playbackEnabled === undefined
+          ? {}
+          : { playbackEnabled: recordOptions.playbackEnabled }),
+        ...(recordOptions.durationMs === undefined ? {} : { durationMs: recordOptions.durationMs }),
+        ...(recordOptions.metadata === undefined ? {} : { metadata: recordOptions.metadata })
+      } satisfies FlowNodeEditStep<Metadata>;
+
+      return appendStep(step);
+    },
     play: () => {
       const playbackQueue = getPlaybackQueue();
 
@@ -352,13 +513,28 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return getState();
     }
   };
+
+  function appendStep(step: FlowStep<Metadata>) {
+    validateStep(step, new Set(historySteps.map((historyStep) => historyStep.id)));
+    const hadPlaybackSteps = getPlaybackQueue().length > 0;
+    historySteps = [...historySteps, step];
+
+    if (!hadPlaybackSteps && step.playbackEnabled !== false) {
+      currentStepId = step.id;
+    }
+
+    return reconcileCurrentStep(historySteps.length - 1);
+  }
 }
 
-function projectStepListItem<Metadata>(step: FlowStep<Metadata>): FlowStepListItem {
+function projectStepListItem<Metadata>(
+  step: FlowStep<Metadata>,
+  stepTypeLabels: Partial<Record<FlowStepType, string>> | undefined
+): FlowStepListItem {
   return {
     id: step.id,
     type: step.type,
-    typeLabel: getStepTypeLabel(step.type),
+    typeLabel: stepTypeLabels?.[step.type] ?? getStepTypeLabel(step.type),
     title: step.title,
     playbackEnabled: step.playbackEnabled !== false
   };
@@ -383,6 +559,12 @@ function getStepTypeLabel(type: FlowStepType) {
   switch (type) {
     case "highlight":
       return "Highlight";
+    case "node-drag":
+      return "Node drag";
+    case "node-add":
+      return "Node add";
+    case "node-edit":
+      return "Node edit";
   }
 }
 
@@ -394,43 +576,96 @@ function validateOptions<Metadata>(options: CreateFlowPlaybackOptions<Metadata>)
   const stepIds = new Set<string>();
 
   for (const step of options.steps) {
-    if (step.id.length === 0) {
-      throw new FlowPlaybackError("Flow playback step IDs must not be empty.");
-    }
-
-    if (step.type !== "highlight") {
-      throw new FlowPlaybackError(`Flow playback step "${step.id}" type must be "highlight".`);
-    }
-
-    if (step.title.length === 0) {
-      throw new FlowPlaybackError(`Flow playback step "${step.id}" title must not be empty.`);
-    }
-
-    if (!Array.isArray(step.nodeIds)) {
-      throw new FlowPlaybackError(`Flow playback step "${step.id}" nodeIds must be an array.`);
-    }
-
-    if (!Array.isArray(step.edgeIds)) {
-      throw new FlowPlaybackError(`Flow playback step "${step.id}" edgeIds must be an array.`);
-    }
-
-    if (stepIds.has(step.id)) {
-      throw new FlowPlaybackError(
-        `Flow playback step IDs must be unique. Duplicate ID: "${step.id}".`
-      );
-    }
-
+    validateStep(step, stepIds);
     stepIds.add(step.id);
-
-    if (
-      step.durationMs !== undefined &&
-      (!Number.isFinite(step.durationMs) || step.durationMs <= 0)
-    ) {
-      throw new FlowPlaybackError(
-        `Flow playback step "${step.id}" durationMs must be greater than 0 when provided.`
-      );
-    }
   }
+}
+
+function validateStep<Metadata>(step: FlowStep<Metadata>, existingStepIds: Set<string>) {
+  if (step.id.length === 0) {
+    throw new FlowPlaybackError("Flow playback step IDs must not be empty.");
+  }
+
+  if (step.title.length === 0) {
+    throw new FlowPlaybackError(`Flow playback step "${step.id}" title must not be empty.`);
+  }
+
+  if (existingStepIds.has(step.id)) {
+    throw new FlowPlaybackError(
+      `Flow playback step IDs must be unique. Duplicate ID: "${step.id}".`
+    );
+  }
+
+  switch (step.type) {
+    case "highlight":
+      if (!Array.isArray(step.nodeIds)) {
+        throw new FlowPlaybackError(`Flow playback step "${step.id}" nodeIds must be an array.`);
+      }
+
+      if (!Array.isArray(step.edgeIds)) {
+        throw new FlowPlaybackError(`Flow playback step "${step.id}" edgeIds must be an array.`);
+      }
+      break;
+    case "node-drag":
+      if (step.nodeId.length === 0) {
+        throw new FlowPlaybackError(`Flow playback step "${step.id}" nodeId must not be empty.`);
+      }
+      validatePosition(step.id, "from", step.from);
+      validatePosition(step.id, "to", step.to);
+      break;
+    case "node-add":
+      validateNodeSnapshot(step.id, "node", step.node);
+      break;
+    case "node-edit":
+      validateNodeSnapshot(step.id, "before", step.before);
+      validateNodeSnapshot(step.id, "after", step.after);
+      break;
+  }
+
+  if (
+    step.durationMs !== undefined &&
+    (!Number.isFinite(step.durationMs) || step.durationMs <= 0)
+  ) {
+    throw new FlowPlaybackError(
+      `Flow playback step "${step.id}" durationMs must be greater than 0 when provided.`
+    );
+  }
+}
+
+function validateNodeSnapshot(stepId: string, field: string, node: FlowNodeSnapshot) {
+  if (!node || typeof node !== "object" || typeof node.id !== "string" || node.id.length === 0) {
+    throw new FlowPlaybackError(`Flow playback step "${stepId}" ${field}.id must not be empty.`);
+  }
+
+  if (node.position !== undefined) {
+    validatePosition(stepId, `${field}.position`, node.position);
+  }
+}
+
+function validatePosition(stepId: string, field: string, position: FlowNodePosition) {
+  if (
+    !position ||
+    typeof position !== "object" ||
+    !Number.isFinite(position.x) ||
+    !Number.isFinite(position.y)
+  ) {
+    throw new FlowPlaybackError(
+      `Flow playback step "${stepId}" ${field} must contain finite x and y coordinates.`
+    );
+  }
+}
+
+function createRecordedStepId(type: FlowStepType, nodeId: string, count: number) {
+  return `${type}-${slugifyId(nodeId)}-${count}`;
+}
+
+function slugifyId(id: string) {
+  const slug = id
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return slug || "node";
 }
 
 function projectPlaybackQueue<Step extends Pick<FlowStep, "playbackEnabled">>(

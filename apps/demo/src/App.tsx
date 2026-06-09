@@ -4,9 +4,11 @@ import {
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  applyNodeChanges,
   useReactFlow,
   type Edge,
-  type Node
+  type Node,
+  type NodeChange
 } from "@xyflow/react";
 import {
   FlowPlaybackControls,
@@ -26,7 +28,7 @@ type DemoEdgeData = {
 
 type DemoPlayback = UseFlowPlaybackResult<DemoNodeData, DemoEdgeData>;
 
-const nodes = [
+const initialNodes = [
   {
     id: "request",
     position: { x: 0, y: 80 },
@@ -49,7 +51,7 @@ const nodes = [
   }
 ] satisfies Node<DemoNodeData>[];
 
-const edges = [
+const initialEdges = [
   { id: "request-triage", source: "request", target: "triage" },
   { id: "triage-review", source: "triage", target: "review" },
   { id: "review-handoff", source: "review", target: "handoff" }
@@ -96,11 +98,16 @@ export function App() {
 function PlaybackDemo() {
   const reactFlow = useReactFlow();
   const [guidedViewport, setGuidedViewport] = useState(false);
+  const [demoNodes, setDemoNodes] = useState(initialNodes);
+  const onNodesChange = (changes: NodeChange<Node<DemoNodeData>>[]) => {
+    setDemoNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
+  };
   const playback = useFlowPlayback({
-    nodes,
-    edges,
+    nodes: demoNodes,
+    edges: initialEdges,
     steps,
     defaultDurationMs: 2_400,
+    formatNodeLabel: formatDemoNodeLabel,
     viewport: { enabled: guidedViewport, reactFlow }
   });
 
@@ -157,6 +164,14 @@ function PlaybackDemo() {
 
         <div className="control-row">
           <FlowPlaybackControls className="playback-controls" playback={playback} />
+          <div className="edit-controls" aria-label="Node edit controls">
+            <button onClick={() => addFollowUpNode(setDemoNodes, playback)} type="button">
+              Add follow-up node
+            </button>
+            <button onClick={() => editReviewerLabel(setDemoNodes, playback)} type="button">
+              Edit reviewer label
+            </button>
+          </div>
           <label className="viewport-toggle">
             <input
               checked={guidedViewport}
@@ -223,7 +238,9 @@ function PlaybackDemo() {
           edges={flowEdges}
           fitView
           nodes={flowNodes}
-          nodesDraggable={false}
+          onNodesChange={onNodesChange}
+          onNodeDragStart={(_, node) => playback.recordNodeDragStart(snapshotNode(node))}
+          onNodeDragStop={(_, node) => playback.recordNodeDragStop(snapshotNode(node))}
           nodesConnectable={false}
           panOnScroll
         >
@@ -240,6 +257,72 @@ function nodeDomAttributes(id: string, isActive: boolean) {
     "data-testid": `node-${id}`,
     "data-active": String(isActive)
   } as NonNullable<Node<DemoNodeData>["domAttributes"]>;
+}
+
+function addFollowUpNode(
+  setDemoNodes: React.Dispatch<React.SetStateAction<typeof initialNodes>>,
+  playback: DemoPlayback
+) {
+  const node = {
+    id: "follow-up",
+    position: { x: 1_120, y: 80 },
+    data: { label: "Follow-up review" }
+  };
+
+  setDemoNodes((currentNodes) =>
+    currentNodes.some((currentNode) => currentNode.id === node.id)
+      ? currentNodes
+      : [...currentNodes, node]
+  );
+  playback.recordNodeAdd({
+    node: snapshotNode(node),
+    title: "Add Follow-up review"
+  });
+}
+
+function editReviewerLabel(
+  setDemoNodes: React.Dispatch<React.SetStateAction<typeof initialNodes>>,
+  playback: DemoPlayback
+) {
+  const before = initialNodes.find((node) => node.id === "review");
+
+  if (!before) {
+    return;
+  }
+
+  const after = {
+    ...before,
+    data: { ...before.data, label: "Review queue updated" }
+  };
+
+  setDemoNodes((currentNodes) =>
+    currentNodes.map((node) => (node.id === after.id ? { ...node, data: after.data } : node))
+  );
+  playback.recordNodeEdit({
+    before: snapshotNode(before),
+    after: snapshotNode(after),
+    title: "Edit Reviewer queue"
+  });
+}
+
+function snapshotNode(node: Node<DemoNodeData>) {
+  return {
+    id: node.id,
+    position: node.position,
+    data: node.data
+  };
+}
+
+function formatDemoNodeLabel(node: { id: string; data?: unknown }) {
+  if (node.data && typeof node.data === "object" && "label" in node.data) {
+    const label = (node.data as { label?: unknown }).label;
+
+    if (typeof label === "string" && label.length > 0) {
+      return label;
+    }
+  }
+
+  return initialNodes.find((demoNode) => demoNode.id === node.id)?.data.label;
 }
 
 function edgeDomAttributes(id: string, isActive: boolean) {

@@ -158,6 +158,22 @@ h2 {
   padding: 0 10px;
 }
 
+.edit-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.edit-controls button {
+  background: #0f766e;
+  border: 1px solid #0f766e;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
 .viewport-toggle {
   align-items: center;
   color: #1f2937;
@@ -297,6 +313,10 @@ h2 {
 @media (max-width: 520px) {
   .playback-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .edit-controls {
+    grid-template-columns: 1fr;
   }
 
   h1 {

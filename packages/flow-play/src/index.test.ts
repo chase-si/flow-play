@@ -244,6 +244,134 @@ describe("createFlowPlayback", () => {
     });
   });
 
+  it("records node drag, add, and edit steps with generated labels", () => {
+    const playback = createFlowPlayback({
+      steps: [],
+      defaultDurationMs: 1_000,
+      formatNodeLabel: (node) => (node.id === "review" ? "Reviewer queue" : undefined)
+    });
+
+    playback.recordNodeDrag({
+      nodeId: "review",
+      from: { x: 10, y: 20 },
+      to: { x: 40, y: 80 }
+    });
+    playback.recordNodeAdd({
+      node: {
+        id: "approve",
+        position: { x: 120, y: 40 },
+        data: { label: "Approval gate" }
+      }
+    });
+    playback.recordNodeEdit({
+      before: {
+        id: "fallback",
+        position: { x: 0, y: 0 },
+        data: { label: "Old label" }
+      },
+      after: {
+        id: "fallback",
+        position: { x: 0, y: 0 },
+        data: { label: "New label" }
+      }
+    });
+
+    expect(playback.getStepList()).toEqual([
+      expect.objectContaining({
+        id: "node-drag-review-1",
+        type: "node-drag",
+        typeLabel: "Node drag",
+        title: "Move Reviewer queue",
+        playbackEnabled: true
+      }),
+      expect.objectContaining({
+        id: "node-add-approve-2",
+        type: "node-add",
+        typeLabel: "Node add",
+        title: "Add approve",
+        playbackEnabled: true
+      }),
+      expect.objectContaining({
+        id: "node-edit-fallback-3",
+        type: "node-edit",
+        typeLabel: "Node edit",
+        title: "Edit fallback",
+        playbackEnabled: true
+      })
+    ]);
+    expect(playback.getState()).toMatchObject({
+      currentStep: {
+        id: "node-drag-review-1",
+        type: "node-drag",
+        nodeId: "review",
+        from: { x: 10, y: 20 },
+        to: { x: 40, y: 80 }
+      },
+      stepCount: 3
+    });
+    expect(playback.getSteps()).toEqual([
+      expect.objectContaining({
+        id: "node-drag-review-1",
+        type: "node-drag",
+        nodeId: "review",
+        from: { x: 10, y: 20 },
+        to: { x: 40, y: 80 }
+      }),
+      expect.objectContaining({
+        id: "node-add-approve-2",
+        type: "node-add",
+        node: {
+          id: "approve",
+          position: { x: 120, y: 40 },
+          data: { label: "Approval gate" }
+        }
+      }),
+      expect.objectContaining({
+        id: "node-edit-fallback-3",
+        type: "node-edit",
+        before: {
+          id: "fallback",
+          position: { x: 0, y: 0 },
+          data: { label: "Old label" }
+        },
+        after: {
+          id: "fallback",
+          position: { x: 0, y: 0 },
+          data: { label: "New label" }
+        }
+      })
+    ]);
+  });
+
+  it("allows callers to override node edit type labels", () => {
+    const playback = createFlowPlayback({
+      steps: [
+        {
+          id: "move-review",
+          type: "node-drag",
+          title: "Move review",
+          nodeId: "review",
+          from: { x: 0, y: 0 },
+          to: { x: 20, y: 10 }
+        }
+      ],
+      defaultDurationMs: 1_000,
+      stepTypeLabels: {
+        "node-drag": "Moved node"
+      }
+    });
+
+    expect(playback.getStepList()).toEqual([
+      {
+        id: "move-review",
+        type: "node-drag",
+        typeLabel: "Moved node",
+        title: "Move review",
+        playbackEnabled: true
+      }
+    ]);
+  });
+
   it("exposes serializable step definitions and non-controlled playback state", () => {
     const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
 
