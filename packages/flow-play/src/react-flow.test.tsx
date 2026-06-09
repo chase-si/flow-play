@@ -240,6 +240,73 @@ describe("useFlowPlayback", () => {
     ]);
   });
 
+  it("records edge-connect steps with full edge payloads and highlights the edge", () => {
+    const customNodes: Node[] = [
+      ...nodes,
+      {
+        id: "review",
+        position: { x: 200, y: 50 },
+        data: { label: "Review" }
+      }
+    ];
+    const connectedEdge: Edge = {
+      id: "start-review",
+      source: "start",
+      target: "review",
+      sourceHandle: "out",
+      targetHandle: "in",
+      type: "custom",
+      data: { customEdgeField: "kept" },
+      animated: true,
+      style: { stroke: "#f00" },
+      label: "review path"
+    };
+    const customEdges: Edge[] = [...edges, connectedEdge];
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes: customNodes,
+        edges: customEdges,
+        steps: emptySteps,
+        defaultDurationMs: 1_000
+      })
+    );
+
+    act(() =>
+      result.current.recordEdgeConnect({
+        edge: connectedEdge,
+        title: "Connect start to review"
+      })
+    );
+
+    expect(result.current.stepList).toEqual([
+      expect.objectContaining({
+        id: "edge-connect-start-review-1",
+        type: "edge-connect",
+        typeLabel: "Edge connect",
+        title: "Connect start to review"
+      })
+    ]);
+    expect(result.current.steps[0]).toMatchObject({
+      type: "edge-connect",
+      edge: {
+        id: "start-review",
+        source: "start",
+        target: "review",
+        sourceHandle: "out",
+        targetHandle: "in",
+        type: "custom",
+        data: { customEdgeField: "kept" },
+        animated: true,
+        style: { stroke: "#f00" },
+        label: "review path"
+      }
+    });
+    expect(result.current.activeEdgeIds).toEqual(["start-review"]);
+    expect(result.current.edges.find((edge) => edge.id === "start-review")?.data.flowPlayActive).toBe(
+      true
+    );
+  });
+
   it("reports diagnostics for unknown dynamic node and edge references", () => {
     const { result } = renderHook(() =>
       useFlowPlayback({

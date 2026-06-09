@@ -15,6 +15,7 @@ import {
   type FlowPlaybackStep,
   type FlowStep,
   type FlowStepListItem,
+  type RecordEdgeConnectOptions,
   type RecordNodeAddOptions,
   type RecordNodeEditOptions
 } from "./index";
@@ -61,6 +62,7 @@ export interface UseFlowPlaybackResult<
   recordNodeDragStop: (node: FlowNodeSnapshot) => void;
   recordNodeAdd: (options: RecordNodeAddOptions<Metadata>) => void;
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => void;
+  recordEdgeConnect: (options: RecordEdgeConnectOptions<Metadata>) => void;
   setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => void;
   deleteStep: (stepId: string) => void;
   advanceBy: (elapsedMs: number) => void;
@@ -221,6 +223,8 @@ export function useFlowPlayback<
     },
     recordNodeAdd: (recordOptions) => apply(latestPlayback.current.recordNodeAdd(recordOptions)),
     recordNodeEdit: (recordOptions) => apply(latestPlayback.current.recordNodeEdit(recordOptions)),
+    recordEdgeConnect: (recordOptions) =>
+      apply(latestPlayback.current.recordEdgeConnect(recordOptions)),
     setStepPlaybackEnabled: (stepId, playbackEnabled) =>
       apply(latestPlayback.current.setStepPlaybackEnabled(stepId, playbackEnabled)),
     deleteStep: (stepId) => apply(latestPlayback.current.deleteStep(stepId)),
@@ -524,13 +528,22 @@ function getStepNodeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
       return [step.node.id];
     case "node-edit":
       return [step.after.id];
+    case "edge-connect":
+      return [];
   }
 }
 
 function getStepEdgeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
-  if (!step || step.type !== "highlight") {
+  if (!step) {
     return [];
   }
 
-  return [...step.edgeIds];
+  switch (step.type) {
+    case "highlight":
+      return [...step.edgeIds];
+    case "edge-connect":
+      return [step.edge.id];
+    default:
+      return [];
+  }
 }

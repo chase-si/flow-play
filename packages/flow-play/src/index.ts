@@ -21,12 +21,25 @@ export interface FlowNodeSnapshot {
   [key: string]: unknown;
 }
 
+export interface FlowEdgeSnapshot {
+  id: string;
+  source: string;
+  target: string;
+  data?: unknown;
+  [key: string]: unknown;
+}
+
 export interface FlowNodeLabelReference {
   id: string;
   data?: unknown;
 }
 
-export type FlowStepType = "highlight" | "node-drag" | "node-add" | "node-edit";
+export type FlowStepType =
+  | "highlight"
+  | "node-drag"
+  | "node-add"
+  | "node-edit"
+  | "edge-connect";
 
 export interface FlowHighlightStep<Metadata = Record<string, unknown>> {
   id: string;
@@ -77,11 +90,23 @@ export interface FlowNodeEditStep<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
+export interface FlowEdgeConnectStep<Metadata = Record<string, unknown>> {
+  id: string;
+  type: "edge-connect";
+  title: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  edge: FlowEdgeSnapshot;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
 export type FlowStep<Metadata = Record<string, unknown>> =
   | FlowHighlightStep<Metadata>
   | FlowNodeDragStep<Metadata>
   | FlowNodeAddStep<Metadata>
-  | FlowNodeEditStep<Metadata>;
+  | FlowNodeEditStep<Metadata>
+  | FlowEdgeConnectStep<Metadata>;
 
 export type FlowPlaybackStep<Metadata = Record<string, unknown>> = FlowStep<Metadata>;
 
@@ -151,6 +176,15 @@ export interface RecordNodeEditOptions<Metadata = Record<string, unknown>> {
   metadata?: Metadata;
 }
 
+export interface RecordEdgeConnectOptions<Metadata = Record<string, unknown>> {
+  edge: FlowEdgeSnapshot;
+  title?: string;
+  description?: string;
+  playbackEnabled?: boolean;
+  durationMs?: number;
+  metadata?: Metadata;
+}
+
 export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   getState: () => FlowPlaybackState<Metadata>;
   getSteps: () => FlowStep<Metadata>[];
@@ -158,6 +192,7 @@ export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   recordNodeDrag: (options: RecordNodeDragOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordNodeAdd: (options: RecordNodeAddOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => FlowPlaybackState<Metadata>;
+  recordEdgeConnect: (options: RecordEdgeConnectOptions<Metadata>) => FlowPlaybackState<Metadata>;
   play: () => FlowPlaybackState<Metadata>;
   pause: () => FlowPlaybackState<Metadata>;
   next: () => FlowPlaybackState<Metadata>;
@@ -383,6 +418,24 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 
       return appendStep(step);
     },
+    recordEdgeConnect: (recordOptions) => {
+      const step = {
+        id: createRecordedStepId("edge-connect", recordOptions.edge.id, historySteps.length + 1),
+        type: "edge-connect",
+        title: recordOptions.title ?? `Connect ${recordOptions.edge.id}`,
+        edge: recordOptions.edge,
+        ...(recordOptions.description === undefined
+          ? {}
+          : { description: recordOptions.description }),
+        ...(recordOptions.playbackEnabled === undefined
+          ? {}
+          : { playbackEnabled: recordOptions.playbackEnabled }),
+        ...(recordOptions.durationMs === undefined ? {} : { durationMs: recordOptions.durationMs }),
+        ...(recordOptions.metadata === undefined ? {} : { metadata: recordOptions.metadata })
+      } satisfies FlowEdgeConnectStep<Metadata>;
+
+      return appendStep(step);
+    },
     play: () => {
       const playbackQueue = getPlaybackQueue();
 
@@ -565,6 +618,8 @@ function getStepTypeLabel(type: FlowStepType) {
       return "Node add";
     case "node-edit":
       return "Node edit";
+    case "edge-connect":
+      return "Edge connect";
   }
 }
 
@@ -620,6 +675,9 @@ function validateStep<Metadata>(step: FlowStep<Metadata>, existingStepIds: Set<s
       validateNodeSnapshot(step.id, "before", step.before);
       validateNodeSnapshot(step.id, "after", step.after);
       break;
+    case "edge-connect":
+      validateEdgeSnapshot(step.id, "edge", step.edge);
+      break;
   }
 
   if (
@@ -639,6 +697,24 @@ function validateNodeSnapshot(stepId: string, field: string, node: FlowNodeSnaps
 
   if (node.position !== undefined) {
     validatePosition(stepId, `${field}.position`, node.position);
+  }
+}
+
+function validateEdgeSnapshot(stepId: string, field: string, edge: FlowEdgeSnapshot) {
+  if (!edge || typeof edge !== "object" || typeof edge.id !== "string" || edge.id.length === 0) {
+    throw new FlowPlaybackError(`Flow playback step "${stepId}" ${field}.id must not be empty.`);
+  }
+
+  if (typeof edge.source !== "string" || edge.source.length === 0) {
+    throw new FlowPlaybackError(
+      `Flow playback step "${stepId}" ${field}.source must not be empty.`
+    );
+  }
+
+  if (typeof edge.target !== "string" || edge.target.length === 0) {
+    throw new FlowPlaybackError(
+      `Flow playback step "${stepId}" ${field}.target must not be empty.`
+    );
   }
 }
 

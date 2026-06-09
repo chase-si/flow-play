@@ -4,8 +4,10 @@ import {
   Controls,
   ReactFlow,
   ReactFlowProvider,
+  addEdge,
   applyNodeChanges,
   useReactFlow,
+  type Connection,
   type Edge,
   type Node,
   type NodeChange
@@ -99,12 +101,13 @@ function PlaybackDemo() {
   const reactFlow = useReactFlow();
   const [guidedViewport, setGuidedViewport] = useState(false);
   const [demoNodes, setDemoNodes] = useState(initialNodes);
+  const [demoEdges, setDemoEdges] = useState<Edge<DemoEdgeData>[]>(initialEdges);
   const onNodesChange = (changes: NodeChange<Node<DemoNodeData>>[]) => {
     setDemoNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
   };
   const playback = useFlowPlayback({
     nodes: demoNodes,
-    edges: initialEdges,
+    edges: demoEdges,
     steps,
     defaultDurationMs: 2_400,
     formatNodeLabel: formatDemoNodeLabel,
@@ -119,6 +122,19 @@ function PlaybackDemo() {
     const interval = window.setInterval(() => playback.advanceBy(250), 250);
     return () => window.clearInterval(interval);
   }, [playback]);
+
+  const onConnect = (connection: Connection) => {
+    const edge: Edge<DemoEdgeData> = {
+      ...connection,
+      id: `connect-${connection.source}-${connection.target}-${demoEdges.length + 1}`
+    };
+
+    setDemoEdges((currentEdges) => addEdge(edge, currentEdges));
+    playback.recordEdgeConnect({
+      edge: snapshotEdge(edge),
+      title: `Connect ${connection.source} to ${connection.target}`
+    });
+  };
 
   const flowNodes = useMemo(
     () =>
@@ -239,9 +255,9 @@ function PlaybackDemo() {
           fitView
           nodes={flowNodes}
           onNodesChange={onNodesChange}
+          onConnect={onConnect}
           onNodeDragStart={(_, node) => playback.recordNodeDragStart(snapshotNode(node))}
           onNodeDragStop={(_, node) => playback.recordNodeDragStop(snapshotNode(node))}
-          nodesConnectable={false}
           panOnScroll
         >
           <Background />
@@ -311,6 +327,10 @@ function snapshotNode(node: Node<DemoNodeData>) {
     position: node.position,
     data: node.data
   };
+}
+
+function snapshotEdge(edge: Edge<DemoEdgeData>) {
+  return { ...edge };
 }
 
 function formatDemoNodeLabel(node: { id: string; data?: unknown }) {
