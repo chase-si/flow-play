@@ -125,7 +125,8 @@ h2 {
 }
 
 .playback-controls button,
-.step-button {
+.step-button,
+.step-delete {
   background: #ffffff;
   border: 1px solid #c7d0dd;
   border-radius: 8px;
@@ -134,7 +135,8 @@ h2 {
   min-height: 40px;
 }
 
-.playback-controls button:disabled {
+.playback-controls button:disabled,
+.step-button:disabled {
   color: #94a3b8;
   cursor: not-allowed;
 }
@@ -171,10 +173,15 @@ h2 {
 
 .step-list {
   display: grid;
-  gap: 10px;
+  gap: 14px;
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+.step-list li {
+  display: grid;
+  gap: 8px;
 }
 
 .step-button {
@@ -187,16 +194,55 @@ h2 {
   width: 100%;
 }
 
-.step-button span {
+.step-index {
   color: #64748b;
   font-size: 0.78rem;
   font-weight: 700;
+}
+
+.step-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.step-type {
+  color: #0f766e;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
 }
 
 .step-button.active {
   border-color: #0f766e;
   box-shadow: inset 3px 0 0 #0f766e;
   color: #0f4f49;
+}
+
+.step-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.step-toggle {
+  align-items: center;
+  color: #526071;
+  display: inline-flex;
+  font-size: 0.86rem;
+  gap: 8px;
+}
+
+.step-toggle input {
+  accent-color: #0f766e;
+  height: 18px;
+  width: 34px;
+}
+
+.step-delete {
+  color: #7f1d1d;
+  min-height: 34px;
+  padding: 0 12px;
 }
 
 .canvas-shell {

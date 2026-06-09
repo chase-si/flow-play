@@ -169,9 +169,10 @@ function PlaybackDemo() {
         </div>
 
         <ol aria-label="Playback steps" className="step-list">
-          {steps.map((step, index) => (
+          {playback.stepList.map((step, index) => (
             <li key={step.id}>
               <button
+                disabled={!step.playbackEnabled}
                 aria-current={playback.currentStep?.id === step.id ? "step" : undefined}
                 aria-label={step.title}
                 className={
@@ -180,9 +181,34 @@ function PlaybackDemo() {
                 onClick={() => playback.goToStep(step.id)}
                 type="button"
               >
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                {step.title}
+                <span className="step-index">{String(index + 1).padStart(2, "0")}</span>
+                <span className="step-copy">
+                  <span className="step-type">{step.typeLabel}</span>
+                  <span>{step.title}</span>
+                </span>
               </button>
+              <div className="step-actions">
+                <label className="step-toggle">
+                  <input
+                    aria-label={`Include ${step.title} in playback`}
+                    checked={step.playbackEnabled}
+                    onChange={(event) =>
+                      playback.setStepPlaybackEnabled(step.id, event.currentTarget.checked)
+                    }
+                    role="switch"
+                    type="checkbox"
+                  />
+                  <span>Playback</span>
+                </label>
+                <button
+                  aria-label={`Delete ${step.title}`}
+                  className="step-delete"
+                  onClick={() => playback.deleteStep(step.id)}
+                  type="button"
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ol>

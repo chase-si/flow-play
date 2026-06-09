@@ -85,6 +85,34 @@ describe("createFlowPlaybackPreview", () => {
 });
 
 describe("createFlowPlayback", () => {
+  it("exposes every history step with curation data for playback lists", () => {
+    const playback = createFlowPlayback({ steps: timeline.steps, defaultDurationMs: 1_000 });
+
+    expect(playback.getStepList()).toEqual([
+      {
+        id: "intro",
+        type: "highlight",
+        typeLabel: "Highlight",
+        title: "Introduce the path",
+        playbackEnabled: true
+      },
+      {
+        id: "notes",
+        type: "highlight",
+        typeLabel: "Highlight",
+        title: "Static guide notes",
+        playbackEnabled: false
+      },
+      {
+        id: "finish",
+        type: "highlight",
+        typeLabel: "Highlight",
+        title: "Complete the path",
+        playbackEnabled: true
+      }
+    ]);
+  });
+
   it("projects enabled highlight steps into the playback queue", () => {
     const playback = createFlowPlayback({ steps: timeline.steps, defaultDurationMs: 1_000 });
 
@@ -125,6 +153,95 @@ describe("createFlowPlayback", () => {
     });
     expect(playback.play().status).toBe("idle");
     expect(playback.next().currentStep).toBeUndefined();
+  });
+
+  it("toggles playback inclusion while keeping disabled steps in history", () => {
+    const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
+
+    expect(playback.setStepPlaybackEnabled("review", false)).toMatchObject({
+      currentStep: steps[0],
+      currentStepIndex: 0,
+      stepCount: 2
+    });
+    expect(playback.getStepList()[1]).toMatchObject({
+      id: "review",
+      playbackEnabled: false
+    });
+
+    expect(playback.next()).toMatchObject({
+      currentStep: steps[2],
+      currentStepIndex: 1,
+      stepCount: 2
+    });
+
+    expect(playback.setStepPlaybackEnabled("review", true)).toMatchObject({
+      currentStep: steps[2],
+      currentStepIndex: 2,
+      stepCount: 3
+    });
+  });
+
+  it("moves the pointer when disabling the current playback step", () => {
+    const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
+
+    playback.goToStep("review");
+    expect(playback.setStepPlaybackEnabled("review", false)).toMatchObject({
+      currentStep: steps[2],
+      currentStepIndex: 1,
+      stepCount: 2
+    });
+
+    expect(playback.setStepPlaybackEnabled("finish", false)).toMatchObject({
+      currentStep: steps[0],
+      currentStepIndex: 0,
+      stepCount: 1
+    });
+
+    expect(playback.setStepPlaybackEnabled("intro", false)).toEqual({
+      currentStep: undefined,
+      currentStepIndex: -1,
+      elapsedMs: 0,
+      status: "idle",
+      stepCount: 0,
+      stepDurationMs: 0
+    });
+  });
+
+  it("deletes history steps without behaving as undo", () => {
+    const playback = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
+
+    playback.goToStep("review");
+
+    expect(playback.deleteStep("intro")).toMatchObject({
+      currentStep: steps[1],
+      currentStepIndex: 0,
+      stepCount: 2
+    });
+    expect(playback.getStepList().map((step) => step.id)).toEqual(["review", "finish"]);
+
+    expect(playback.deleteStep("review")).toMatchObject({
+      currentStep: steps[2],
+      currentStepIndex: 0,
+      stepCount: 1
+    });
+
+    expect(playback.deleteStep("finish")).toEqual({
+      currentStep: undefined,
+      currentStepIndex: -1,
+      elapsedMs: 0,
+      status: "idle",
+      stepCount: 0,
+      stepDurationMs: 0
+    });
+
+    const playbackAtEnd = createFlowPlayback({ steps, defaultDurationMs: 1_000 });
+    playbackAtEnd.goToStep("finish");
+
+    expect(playbackAtEnd.deleteStep("finish")).toMatchObject({
+      currentStep: steps[1],
+      currentStepIndex: 1,
+      stepCount: 2
+    });
   });
 
   it("exposes serializable step definitions and non-controlled playback state", () => {
