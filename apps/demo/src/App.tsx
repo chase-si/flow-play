@@ -100,7 +100,7 @@ export function App() {
 function PlaybackDemo() {
   const reactFlow = useReactFlow();
   const [guidedViewport, setGuidedViewport] = useState(false);
-  const [demoNodes, setDemoNodes] = useState(initialNodes);
+  const [demoNodes, setDemoNodes] = useState<Node<DemoNodeData>[]>(initialNodes);
   const [demoEdges, setDemoEdges] = useState<Edge<DemoEdgeData>[]>(initialEdges);
   const onNodesChange = (changes: NodeChange<Node<DemoNodeData>>[]) => {
     setDemoNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
@@ -187,6 +187,20 @@ function PlaybackDemo() {
             <button onClick={() => editReviewerLabel(setDemoNodes, playback)} type="button">
               Edit reviewer label
             </button>
+            <button
+              onClick={() =>
+                deleteReviewerNode(demoNodes, demoEdges, setDemoNodes, setDemoEdges, playback)
+              }
+              type="button"
+            >
+              Delete reviewer node
+            </button>
+            <button
+              onClick={() => deleteRequestEdge(demoEdges, setDemoEdges, playback)}
+              type="button"
+            >
+              Delete request edge
+            </button>
           </div>
           <label className="viewport-toggle">
             <input
@@ -254,8 +268,8 @@ function PlaybackDemo() {
           edges={flowEdges}
           fitView
           nodes={flowNodes}
-          onNodesChange={onNodesChange}
           onConnect={onConnect}
+          onNodesChange={onNodesChange}
           onNodeDragStart={(_, node) => playback.recordNodeDragStart(snapshotNode(node))}
           onNodeDragStop={(_, node) => playback.recordNodeDragStop(snapshotNode(node))}
           panOnScroll
@@ -276,7 +290,7 @@ function nodeDomAttributes(id: string, isActive: boolean) {
 }
 
 function addFollowUpNode(
-  setDemoNodes: React.Dispatch<React.SetStateAction<typeof initialNodes>>,
+  setDemoNodes: React.Dispatch<React.SetStateAction<Node<DemoNodeData>[]>>,
   playback: DemoPlayback
 ) {
   const node = {
@@ -297,7 +311,7 @@ function addFollowUpNode(
 }
 
 function editReviewerLabel(
-  setDemoNodes: React.Dispatch<React.SetStateAction<typeof initialNodes>>,
+  setDemoNodes: React.Dispatch<React.SetStateAction<Node<DemoNodeData>[]>>,
   playback: DemoPlayback
 ) {
   const before = initialNodes.find((node) => node.id === "review");
@@ -321,16 +335,63 @@ function editReviewerLabel(
   });
 }
 
+function deleteReviewerNode(
+  demoNodes: Node<DemoNodeData>[],
+  demoEdges: Edge<DemoEdgeData>[],
+  setDemoNodes: React.Dispatch<React.SetStateAction<Node<DemoNodeData>[]>>,
+  setDemoEdges: React.Dispatch<React.SetStateAction<Edge<DemoEdgeData>[]>>,
+  playback: DemoPlayback
+) {
+  const node = demoNodes.find((demoNode) => demoNode.id === "review");
+
+  if (!node) {
+    return;
+  }
+
+  const connectedEdges = demoEdges.filter(
+    (edge) => edge.source === node.id || edge.target === node.id
+  );
+
+  setDemoNodes((currentNodes) => currentNodes.filter((currentNode) => currentNode.id !== node.id));
+  setDemoEdges((currentEdges) =>
+    currentEdges.filter((edge) => edge.source !== node.id && edge.target !== node.id)
+  );
+  playback.recordNodeDelete({
+    node: snapshotNode(node),
+    connectedEdges: connectedEdges.map(snapshotEdge)
+  });
+}
+
+function deleteRequestEdge(
+  demoEdges: Edge<DemoEdgeData>[],
+  setDemoEdges: React.Dispatch<React.SetStateAction<Edge<DemoEdgeData>[]>>,
+  playback: DemoPlayback
+) {
+  const edge = demoEdges.find((demoEdge) => demoEdge.id === "request-triage");
+
+  if (!edge) {
+    return;
+  }
+
+  setDemoEdges((currentEdges) => currentEdges.filter((currentEdge) => currentEdge.id !== edge.id));
+  playback.recordEdgeDelete({
+    edge: snapshotEdge(edge)
+  });
+}
+
 function snapshotNode(node: Node<DemoNodeData>) {
   return {
     id: node.id,
+    ...(node.type === undefined ? {} : { type: node.type }),
     position: node.position,
     data: node.data
   };
 }
 
 function snapshotEdge(edge: Edge<DemoEdgeData>) {
-  return { ...edge };
+  return {
+    ...edge
+  };
 }
 
 function formatDemoNodeLabel(node: { id: string; data?: unknown }) {

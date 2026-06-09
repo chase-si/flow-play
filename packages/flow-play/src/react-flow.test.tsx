@@ -35,6 +35,8 @@ const emptySteps: FlowPlaybackStep[] = [];
 const nodeStepTypeLabels = {
   "node-add": "Added node"
 };
+const formatReviewNodeLabel = (node: { id: string }) =>
+  node.id === "review" ? "Review node" : undefined;
 
 describe("useFlowPlayback", () => {
   it("enhances React Flow nodes and edges with active playback state", () => {
@@ -288,23 +290,105 @@ describe("useFlowPlayback", () => {
     ]);
     expect(result.current.steps[0]).toMatchObject({
       type: "edge-connect",
-      edge: {
-        id: "start-review",
-        source: "start",
-        target: "review",
-        sourceHandle: "out",
-        targetHandle: "in",
-        type: "custom",
-        data: { customEdgeField: "kept" },
-        animated: true,
-        style: { stroke: "#f00" },
-        label: "review path"
-      }
+      edge: connectedEdge
     });
     expect(result.current.activeEdgeIds).toEqual(["start-review"]);
     expect(result.current.edges.find((edge) => edge.id === "start-review")?.data.flowPlayActive).toBe(
       true
     );
+  });
+
+  it("records explicit node and edge deletion steps with complete payloads", () => {
+    const customNodes: Node[] = [
+      ...nodes,
+      {
+        id: "review",
+        type: "reviewNode",
+        position: { x: 200, y: 50 },
+        data: { label: "Review", customNodeField: "kept" }
+      }
+    ];
+    const customEdges: Edge[] = [
+      ...edges,
+      {
+        id: "start-review",
+        source: "start",
+        target: "review",
+        data: { customEdgeField: "incoming" }
+      },
+      {
+        id: "review-finish",
+        source: "review",
+        target: "finish",
+        data: { customEdgeField: "outgoing" },
+        animated: true
+      }
+    ];
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes: customNodes,
+        edges: customEdges,
+        steps: emptySteps,
+        defaultDurationMs: 1_000,
+        formatNodeLabel: formatReviewNodeLabel
+      })
+    );
+
+    act(() =>
+      result.current.recordNodeDelete({
+        node: customNodes[2]!,
+        connectedEdges: [customEdges[1]!, customEdges[2]!]
+      })
+    );
+    act(() => result.current.recordEdgeDelete({ edge: customEdges[0]! }));
+
+    expect(result.current.stepList).toEqual([
+      expect.objectContaining({
+        id: "node-delete-review-1",
+        type: "node-delete",
+        typeLabel: "Node delete",
+        title: "Delete Review node"
+      }),
+      expect.objectContaining({
+        id: "edge-delete-start-finish-2",
+        type: "edge-delete",
+        typeLabel: "Edge delete",
+        title: "Delete start-finish"
+      })
+    ]);
+    expect(result.current.steps).toEqual([
+      expect.objectContaining({
+        id: "node-delete-review-1",
+        type: "node-delete",
+        node: expect.objectContaining({
+          id: "review",
+          type: "reviewNode",
+          data: { label: "Review", customNodeField: "kept" }
+        }),
+        connectedEdges: [
+          expect.objectContaining({
+            id: "start-review",
+            data: { customEdgeField: "incoming" }
+          }),
+          expect.objectContaining({
+            id: "review-finish",
+            data: { customEdgeField: "outgoing" },
+            animated: true
+          })
+        ]
+      }),
+      expect.objectContaining({
+        id: "edge-delete-start-finish-2",
+        type: "edge-delete",
+        edge: expect.objectContaining({
+          id: "start-finish",
+          source: "start",
+          target: "finish"
+        })
+      })
+    ]);
+    expect(result.current.activeNodeIds).toEqual(["review"]);
+    expect(result.current.activeEdgeIds).toEqual(["start-review", "review-finish"]);
   });
 
   it("reports diagnostics for unknown dynamic node and edge references", () => {
