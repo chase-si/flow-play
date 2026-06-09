@@ -85,11 +85,21 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Add follow-up node" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit reviewer label" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete reviewer node" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete request edge" }));
 
     const stepList = screen.getByRole("list", { name: "Playback steps" });
     expect(within(stepList).getByText("Node add")).toBeInTheDocument();
     expect(within(stepList).getByRole("button", { name: "Add Follow-up review" })).toBeEnabled();
     expect(within(stepList).getByText("Node edit")).toBeInTheDocument();
     expect(within(stepList).getByRole("button", { name: "Edit Reviewer queue" })).toBeEnabled();
+    expect(within(stepList).getByText("Node delete")).toBeInTheDocument();
+    expect(
+      within(stepList).getByRole("button", { name: "Delete Review queue updated" })
+    ).toBeEnabled();
+    expect(within(stepList).getByText("Edge delete")).toBeInTheDocument();
+    expect(within(stepList).getByRole("button", { name: "Delete request-triage" })).toBeEnabled();
+    expect(screen.queryByTestId("node-review")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("edge-request-triage")).not.toBeInTheDocument();
   });
 });
