@@ -31,6 +31,10 @@ const steps: FlowPlaybackStep[] = [
   }
 ];
 const introStep = steps[0] as FlowPlaybackStep;
+const emptySteps: FlowPlaybackStep[] = [];
+const nodeStepTypeLabels = {
+  "node-add": "Added node"
+};
 
 describe("useFlowPlayback", () => {
   it("enhances React Flow nodes and edges with active playback state", () => {
@@ -134,6 +138,106 @@ describe("useFlowPlayback", () => {
     expect(result.current.stepCount).toBe(0);
     expect(result.current.steps).toEqual([]);
     expect(result.current.stepList.map((step) => step.id)).toEqual(["intro"]);
+  });
+
+  it("records a completed node drag once with from and to positions", () => {
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes,
+        edges,
+        steps: emptySteps,
+        defaultDurationMs: 1_000,
+        formatNodeLabel: (node) => (node.id === "start" ? "Start node" : undefined)
+      })
+    );
+
+    act(() =>
+      result.current.recordNodeDragStart({
+        id: "start",
+        position: { x: 0, y: 0 },
+        data: { label: "Start" }
+      })
+    );
+    act(() =>
+      result.current.recordNodeDragStop({
+        id: "start",
+        position: { x: 60, y: 25 },
+        data: { label: "Start" }
+      })
+    );
+
+    expect(result.current.stepList).toEqual([
+      expect.objectContaining({
+        id: "node-drag-start-1",
+        type: "node-drag",
+        typeLabel: "Node drag",
+        title: "Move Start node"
+      })
+    ]);
+    expect(result.current.currentStep).toMatchObject({
+      id: "node-drag-start-1",
+      type: "node-drag",
+      nodeId: "start",
+      from: { x: 0, y: 0 },
+      to: { x: 60, y: 25 }
+    });
+    expect(result.current.activeNodeIds).toEqual(["start"]);
+  });
+
+  it("records explicit node add and edit steps", () => {
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes,
+        edges,
+        steps: emptySteps,
+        defaultDurationMs: 1_000,
+        stepTypeLabels: nodeStepTypeLabels
+      })
+    );
+
+    act(() =>
+      result.current.recordNodeAdd({
+        node: {
+          id: "review",
+          position: { x: 100, y: 20 },
+          data: { label: "Reviewer queue" }
+        }
+      })
+    );
+    act(() =>
+      result.current.recordNodeEdit({
+        before: {
+          id: "review",
+          position: { x: 100, y: 20 },
+          data: { label: "Reviewer queue" }
+        },
+        after: {
+          id: "review",
+          position: { x: 100, y: 20 },
+          data: { label: "Updated queue" }
+        },
+        title: "Rename Reviewer queue"
+      })
+    );
+
+    expect(result.current.stepList).toEqual([
+      expect.objectContaining({
+        id: "node-add-review-1",
+        type: "node-add",
+        typeLabel: "Added node",
+        title: "Add review"
+      }),
+      expect.objectContaining({
+        id: "node-edit-review-2",
+        type: "node-edit",
+        typeLabel: "Node edit",
+        title: "Rename Reviewer queue"
+      })
+    ]);
+    expect(result.current.steps).toEqual([
+      expect.objectContaining({ id: "node-add-review-1", type: "node-add" }),
+      expect.objectContaining({ id: "node-edit-review-2", type: "node-edit" })
+    ]);
   });
 
   it("reports diagnostics for unknown dynamic node and edge references", () => {

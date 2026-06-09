@@ -79,4 +79,17 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Guided viewport" }));
     expect(screen.getByRole("switch", { name: "Guided viewport" })).toBeChecked();
   });
+
+  it("records visible typed steps from demo node edit controls", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add follow-up node" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit reviewer label" }));
+
+    const stepList = screen.getByRole("list", { name: "Playback steps" });
+    expect(within(stepList).getByText("Node add")).toBeInTheDocument();
+    expect(within(stepList).getByRole("button", { name: "Add Follow-up review" })).toBeEnabled();
+    expect(within(stepList).getByText("Node edit")).toBeInTheDocument();
+    expect(within(stepList).getByRole("button", { name: "Edit Reviewer queue" })).toBeEnabled();
+  });
 });
