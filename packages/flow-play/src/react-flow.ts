@@ -16,7 +16,9 @@ import {
   type FlowStep,
   type FlowStepListItem,
   type RecordNodeAddOptions,
-  type RecordNodeEditOptions
+  type RecordNodeDeleteOptions,
+  type RecordNodeEditOptions,
+  type RecordEdgeDeleteOptions
 } from "./index";
 
 export interface FlowPlaybackDiagnostic {
@@ -61,6 +63,8 @@ export interface UseFlowPlaybackResult<
   recordNodeDragStop: (node: FlowNodeSnapshot) => void;
   recordNodeAdd: (options: RecordNodeAddOptions<Metadata>) => void;
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => void;
+  recordNodeDelete: (options: RecordNodeDeleteOptions<Metadata>) => void;
+  recordEdgeDelete: (options: RecordEdgeDeleteOptions<Metadata>) => void;
   setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => void;
   deleteStep: (stepId: string) => void;
   advanceBy: (elapsedMs: number) => void;
@@ -221,6 +225,10 @@ export function useFlowPlayback<
     },
     recordNodeAdd: (recordOptions) => apply(latestPlayback.current.recordNodeAdd(recordOptions)),
     recordNodeEdit: (recordOptions) => apply(latestPlayback.current.recordNodeEdit(recordOptions)),
+    recordNodeDelete: (recordOptions) =>
+      apply(latestPlayback.current.recordNodeDelete(recordOptions)),
+    recordEdgeDelete: (recordOptions) =>
+      apply(latestPlayback.current.recordEdgeDelete(recordOptions)),
     setStepPlaybackEnabled: (stepId, playbackEnabled) =>
       apply(latestPlayback.current.setStepPlaybackEnabled(stepId, playbackEnabled)),
     deleteStep: (stepId) => apply(latestPlayback.current.deleteStep(stepId)),
@@ -524,13 +532,28 @@ function getStepNodeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
       return [step.node.id];
     case "node-edit":
       return [step.after.id];
+    case "node-delete":
+      return [step.node.id];
+    case "edge-delete":
+      return [];
   }
 }
 
 function getStepEdgeIds<Metadata>(step: FlowStep<Metadata> | undefined) {
-  if (!step || step.type !== "highlight") {
+  if (!step) {
     return [];
   }
 
-  return [...step.edgeIds];
+  switch (step.type) {
+    case "highlight":
+      return [...step.edgeIds];
+    case "node-delete":
+      return step.connectedEdges.map((edge) => edge.id);
+    case "edge-delete":
+      return [step.edge.id];
+    case "node-drag":
+    case "node-add":
+    case "node-edit":
+      return [];
+  }
 }

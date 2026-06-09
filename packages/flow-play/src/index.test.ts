@@ -244,7 +244,7 @@ describe("createFlowPlayback", () => {
     });
   });
 
-  it("records node drag, add, and edit steps with generated labels", () => {
+  it("records node drag, add, edit, node delete, and edge delete steps with generated labels", () => {
     const playback = createFlowPlayback({
       steps: [],
       defaultDurationMs: 1_000,
@@ -275,6 +275,39 @@ describe("createFlowPlayback", () => {
         data: { label: "New label" }
       }
     });
+    playback.recordNodeDelete({
+      node: {
+        id: "review",
+        position: { x: 80, y: 40 },
+        data: { label: "Reviewer queue", customNodeField: "kept" },
+        type: "reviewNode"
+      },
+      connectedEdges: [
+        {
+          id: "request-review",
+          source: "request",
+          target: "review",
+          data: { customEdgeField: "incoming" },
+          markerEnd: { type: "arrowclosed" }
+        },
+        {
+          id: "review-finish",
+          source: "review",
+          target: "finish",
+          data: { customEdgeField: "outgoing" },
+          animated: true
+        }
+      ]
+    });
+    playback.recordEdgeDelete({
+      edge: {
+        id: "request-approve",
+        source: "request",
+        target: "approve",
+        data: { rule: "approved" },
+        label: "approved path"
+      }
+    });
 
     expect(playback.getStepList()).toEqual([
       expect.objectContaining({
@@ -297,6 +330,20 @@ describe("createFlowPlayback", () => {
         typeLabel: "Node edit",
         title: "Edit fallback",
         playbackEnabled: true
+      }),
+      expect.objectContaining({
+        id: "node-delete-review-4",
+        type: "node-delete",
+        typeLabel: "Node delete",
+        title: "Delete Reviewer queue",
+        playbackEnabled: true
+      }),
+      expect.objectContaining({
+        id: "edge-delete-request-approve-5",
+        type: "edge-delete",
+        typeLabel: "Edge delete",
+        title: "Delete request-approve",
+        playbackEnabled: true
       })
     ]);
     expect(playback.getState()).toMatchObject({
@@ -307,7 +354,7 @@ describe("createFlowPlayback", () => {
         from: { x: 10, y: 20 },
         to: { x: 40, y: 80 }
       },
-      stepCount: 3
+      stepCount: 5
     });
     expect(playback.getSteps()).toEqual([
       expect.objectContaining({
@@ -339,6 +386,43 @@ describe("createFlowPlayback", () => {
           position: { x: 0, y: 0 },
           data: { label: "New label" }
         }
+      }),
+      expect.objectContaining({
+        id: "node-delete-review-4",
+        type: "node-delete",
+        node: {
+          id: "review",
+          position: { x: 80, y: 40 },
+          data: { label: "Reviewer queue", customNodeField: "kept" },
+          type: "reviewNode"
+        },
+        connectedEdges: [
+          {
+            id: "request-review",
+            source: "request",
+            target: "review",
+            data: { customEdgeField: "incoming" },
+            markerEnd: { type: "arrowclosed" }
+          },
+          {
+            id: "review-finish",
+            source: "review",
+            target: "finish",
+            data: { customEdgeField: "outgoing" },
+            animated: true
+          }
+        ]
+      }),
+      expect.objectContaining({
+        id: "edge-delete-request-approve-5",
+        type: "edge-delete",
+        edge: {
+          id: "request-approve",
+          source: "request",
+          target: "approve",
+          data: { rule: "approved" },
+          label: "approved path"
+        }
       })
     ]);
   });
@@ -357,7 +441,8 @@ describe("createFlowPlayback", () => {
       ],
       defaultDurationMs: 1_000,
       stepTypeLabels: {
-        "node-drag": "Moved node"
+        "node-drag": "Moved node",
+        "node-delete": "Removed node"
       }
     });
 
