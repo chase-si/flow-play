@@ -11,7 +11,8 @@ import {
   createFlowPlayback,
   type CreateFlowPlaybackOptions,
   type FlowPlaybackState,
-  type FlowPlaybackStep
+  type FlowPlaybackStep,
+  type FlowStepListItem
 } from "./index";
 
 export interface FlowPlaybackDiagnostic {
@@ -40,6 +41,7 @@ export interface UseFlowPlaybackResult<
   Metadata = Record<string, unknown>
 > extends FlowPlaybackState<Metadata> {
   steps: readonly FlowPlaybackStep<Metadata>[];
+  stepList: FlowStepListItem[];
   nodes: Node<NodeData & { flowPlayActive: boolean }>[];
   edges: Edge<EdgeData & { flowPlayActive: boolean }>[];
   activeNodeIds: string[];
@@ -51,6 +53,8 @@ export interface UseFlowPlaybackResult<
   previous: () => void;
   reset: () => void;
   goToStep: (stepId: string) => void;
+  setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => void;
+  deleteStep: (stepId: string) => void;
   advanceBy: (elapsedMs: number) => void;
 }
 
@@ -63,10 +67,6 @@ export function useFlowPlayback<
 ): UseFlowPlaybackResult<NodeData, EdgeData, Metadata> {
   const { nodes, edges, steps, defaultDurationMs, onStatusChange, onStepChange } = options;
   const viewport = options.viewport;
-  const playbackSteps = useMemo(
-    () => steps.filter((step) => step.playbackEnabled !== false),
-    [steps]
-  );
   const playback = useMemo(
     () =>
       createFlowPlayback({
@@ -78,17 +78,20 @@ export function useFlowPlayback<
     [defaultDurationMs, onStatusChange, onStepChange, steps]
   );
   const [state, setState] = useState(() => playback.getState());
+  const [stepList, setStepList] = useState(() => playback.getStepList());
   const latestPlayback = useRef(playback);
   latestPlayback.current = playback;
+  const playbackStepIds = useMemo(
+    () => new Set(stepList.filter((step) => step.playbackEnabled).map((step) => step.id)),
+    [stepList]
+  );
+  const playbackSteps = useMemo(
+    () => steps.filter((step) => playbackStepIds.has(step.id)),
+    [playbackStepIds, steps]
+  );
 
-  const activeNodeIds = useMemo(
-    () => [...(state.currentStep?.nodeIds ?? [])],
-    [state.currentStep]
-  );
-  const activeEdgeIds = useMemo(
-    () => [...(state.currentStep?.edgeIds ?? [])],
-    [state.currentStep]
-  );
+  const activeNodeIds = useMemo(() => [...(state.currentStep?.nodeIds ?? [])], [state.currentStep]);
+  const activeEdgeIds = useMemo(() => [...(state.currentStep?.edgeIds ?? [])], [state.currentStep]);
   const activeNodeIdSet = useMemo(() => new Set(activeNodeIds), [activeNodeIds]);
   const activeEdgeIdSet = useMemo(() => new Set(activeEdgeIds), [activeEdgeIds]);
 
@@ -146,12 +149,14 @@ export function useFlowPlayback<
 
   const apply = (nextState: FlowPlaybackState<Metadata>) => {
     setState(nextState);
+    setStepList(latestPlayback.current.getStepList());
     applyViewport(nextState);
   };
 
   return {
     ...state,
     steps: playbackSteps,
+    stepList,
     nodes: enhancedNodes,
     edges: enhancedEdges,
     activeNodeIds,
@@ -163,6 +168,9 @@ export function useFlowPlayback<
     previous: () => apply(latestPlayback.current.previous()),
     reset: () => apply(latestPlayback.current.reset()),
     goToStep: (stepId) => apply(latestPlayback.current.goToStep(stepId)),
+    setStepPlaybackEnabled: (stepId, playbackEnabled) =>
+      apply(latestPlayback.current.setStepPlaybackEnabled(stepId, playbackEnabled)),
+    deleteStep: (stepId) => apply(latestPlayback.current.deleteStep(stepId)),
     advanceBy: (elapsedMs) => apply(latestPlayback.current.advanceBy(elapsedMs))
   };
 }

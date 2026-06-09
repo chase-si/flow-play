@@ -93,6 +93,49 @@ describe("useFlowPlayback", () => {
     );
   });
 
+  it("exposes curation actions and keeps playback pointer valid", () => {
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes,
+        edges,
+        steps,
+        defaultDurationMs: 1_000
+      })
+    );
+
+    expect(result.current.stepList).toEqual([
+      expect.objectContaining({
+        id: "intro",
+        typeLabel: "Highlight",
+        title: "Introduce the path",
+        playbackEnabled: true
+      }),
+      expect.objectContaining({
+        id: "done",
+        typeLabel: "Highlight",
+        title: "Finish the path",
+        playbackEnabled: true
+      })
+    ]);
+
+    act(() => result.current.setStepPlaybackEnabled("intro", false));
+
+    expect(result.current.currentStep?.id).toBe("done");
+    expect(result.current.stepCount).toBe(1);
+    expect(result.current.steps.map((step) => step.id)).toEqual(["done"]);
+    expect(result.current.stepList[0]).toMatchObject({
+      id: "intro",
+      playbackEnabled: false
+    });
+
+    act(() => result.current.deleteStep("done"));
+
+    expect(result.current.currentStep).toBeUndefined();
+    expect(result.current.stepCount).toBe(0);
+    expect(result.current.steps).toEqual([]);
+    expect(result.current.stepList.map((step) => step.id)).toEqual(["intro"]);
+  });
+
   it("reports diagnostics for unknown dynamic node and edge references", () => {
     const { result } = renderHook(() =>
       useFlowPlayback({
@@ -267,6 +310,29 @@ describe("FlowPlaybackControls", () => {
     expect(rendered.queryByRole("option", { name: "Introduce the path" })).toBeNull();
   });
 
+  it("updates controls when curation removes the active playback step", () => {
+    const { container } = render(React.createElement(PlaybackControlsHarness));
+    const rendered = within(container);
+
+    fireEvent.click(rendered.getByRole("button", { name: "Disable Introduce the path" }));
+
+    expect(rendered.getByTestId("current-step").textContent).toBe("done");
+    expect(
+      (rendered.getByRole("combobox", { name: "Go to step" }) as HTMLSelectElement).value
+    ).toBe("done");
+    expect(rendered.queryByRole("option", { name: "Introduce the path" })).toBeNull();
+
+    fireEvent.click(rendered.getByRole("button", { name: "Delete Finish the path" }));
+
+    expect(rendered.getByTestId("current-step").textContent).toBe("none");
+    expect((rendered.getByRole("button", { name: "Play" }) as HTMLButtonElement).disabled).toBe(
+      true
+    );
+    expect(
+      (rendered.getByRole("combobox", { name: "Go to step" }) as HTMLSelectElement).disabled
+    ).toBe(true);
+  });
+
   it("allows visible labels and aria labels to be customized", () => {
     render(
       React.createElement(PlaybackControlsHarness, {
@@ -333,7 +399,33 @@ function PlaybackControlsHarness({
     "div",
     {},
     React.createElement(FlowPlaybackControls, { labels, playback }),
+    playback.stepList.map((step) =>
+      React.createElement(
+        "button",
+        {
+          key: `toggle-${step.id}`,
+          type: "button",
+          onClick: () => playback.setStepPlaybackEnabled(step.id, !step.playbackEnabled)
+        },
+        `${step.playbackEnabled ? "Disable" : "Enable"} ${step.title}`
+      )
+    ),
+    playback.stepList.map((step) =>
+      React.createElement(
+        "button",
+        {
+          key: `delete-${step.id}`,
+          type: "button",
+          onClick: () => playback.deleteStep(step.id)
+        },
+        `Delete ${step.title}`
+      )
+    ),
     React.createElement("output", { "data-testid": "playback-status" }, playback.status),
-    React.createElement("output", { "data-testid": "current-step" }, playback.currentStep?.id ?? "none")
+    React.createElement(
+      "output",
+      { "data-testid": "current-step" },
+      playback.currentStep?.id ?? "none"
+    )
   );
 }

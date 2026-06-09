@@ -26,26 +26,55 @@ describe("App", () => {
     ).toBeInTheDocument();
 
     const stepList = screen.getByRole("list", { name: "Playback steps" });
+    expect(within(stepList).getAllByText("Highlight")).toHaveLength(3);
     expect(
       within(stepList).getByRole("button", { name: "Validate routing conditions" })
     ).toBeInTheDocument();
+    expect(
+      within(stepList).getByRole("switch", {
+        name: "Include Collect request context in playback"
+      })
+    ).toBeChecked();
     expect(screen.getByTestId("node-request").dataset.active).toBe("true");
     expect(screen.getByText("request-triage")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    fireEvent.click(
+      within(stepList).getByRole("switch", {
+        name: "Include Collect request context in playback"
+      })
+    );
     expect(
       screen.getByRole("heading", { level: 2, name: "Validate routing conditions" })
     ).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 2")).toBeInTheDocument();
     expect(
-      screen.getByText("Check plan fit, risk, and required reviewer context.")
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("node-triage").dataset.active).toBe("true");
+      within(stepList).getByRole("switch", {
+        name: "Include Collect request context in playback"
+      })
+    ).not.toBeChecked();
 
-    fireEvent.click(within(stepList).getByRole("button", { name: "Complete the handoff" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
     expect(
       screen.getByRole("heading", { level: 2, name: "Complete the handoff" })
     ).toBeInTheDocument();
     expect(screen.getByTestId("node-handoff").dataset.active).toBe("true");
+
+    fireEvent.click(within(stepList).getByRole("button", { name: "Delete Complete the handoff" }));
+    expect(screen.queryByRole("button", { name: "Complete the handoff" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("node-handoff")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Validate routing conditions" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(stepList).getByRole("switch", {
+        name: "Include Validate routing conditions in playback"
+      })
+    );
+    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "No playback steps enabled" })
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("switch", { name: "Guided viewport" }));
     expect(screen.getByRole("switch", { name: "Guided viewport" })).toBeChecked();

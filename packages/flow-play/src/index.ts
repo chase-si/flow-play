@@ -47,6 +47,14 @@ export interface FlowPlaybackState<Metadata = Record<string, unknown>> {
   stepDurationMs: number;
 }
 
+export interface FlowStepListItem {
+  id: string;
+  type: FlowStepType;
+  typeLabel: string;
+  title: string;
+  playbackEnabled: boolean;
+}
+
 export interface CreateFlowPlaybackOptions<Metadata = Record<string, unknown>> {
   steps: readonly FlowStep<Metadata>[];
   defaultDurationMs: number;
@@ -56,12 +64,15 @@ export interface CreateFlowPlaybackOptions<Metadata = Record<string, unknown>> {
 
 export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   getState: () => FlowPlaybackState<Metadata>;
+  getStepList: () => FlowStepListItem[];
   play: () => FlowPlaybackState<Metadata>;
   pause: () => FlowPlaybackState<Metadata>;
   next: () => FlowPlaybackState<Metadata>;
   previous: () => FlowPlaybackState<Metadata>;
   reset: () => FlowPlaybackState<Metadata>;
   goToStep: (stepId: string) => FlowPlaybackState<Metadata>;
+  setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => FlowPlaybackState<Metadata>;
+  deleteStep: (stepId: string) => FlowPlaybackState<Metadata>;
   advanceBy: (elapsedMs: number) => FlowPlaybackState<Metadata>;
 }
 
@@ -91,25 +102,49 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
   validateOptions(options);
 
   const { steps, defaultDurationMs, onStatusChange, onStepChange } = options;
-  const playbackQueue = projectPlaybackQueue(steps);
-  let currentStepIndex = playbackQueue.length === 0 ? -1 : 0;
+  let historySteps = [...steps];
+  let currentStepId = projectPlaybackQueue(historySteps)[0]?.id;
   let elapsedMs = 0;
   let status: FlowPlaybackStatus = "idle";
 
+  const getPlaybackQueue = () => projectPlaybackQueue(historySteps);
+
   const getCurrentStep = () => {
+    const playbackQueue = getPlaybackQueue();
+    const currentStepIndex = currentStepId
+      ? playbackQueue.findIndex((step) => step.id === currentStepId)
+      : -1;
+
+    if (currentStepIndex === -1) {
+      return undefined;
+    }
+
     return playbackQueue[currentStepIndex];
   };
 
-  const getStepDurationMs = () => getCurrentStep()?.durationMs ?? (getCurrentStep() ? defaultDurationMs : 0);
+  const getStepDurationMs = () => {
+    const currentStep = getCurrentStep();
 
-  const getState = (): FlowPlaybackState<Metadata> => ({
-    currentStep: getCurrentStep(),
-    currentStepIndex,
-    elapsedMs,
-    status,
-    stepCount: playbackQueue.length,
-    stepDurationMs: getStepDurationMs()
-  });
+    return currentStep?.durationMs ?? (currentStep ? defaultDurationMs : 0);
+  };
+
+  const getState = (): FlowPlaybackState<Metadata> => {
+    const playbackQueue = getPlaybackQueue();
+    const currentStep = getCurrentStep();
+
+    return {
+      currentStep,
+      currentStepIndex: currentStep
+        ? playbackQueue.findIndex((step) => step.id === currentStep.id)
+        : -1,
+      elapsedMs,
+      status,
+      stepCount: playbackQueue.length,
+      stepDurationMs: getStepDurationMs()
+    };
+  };
+
+  const getStepList = () => historySteps.map(projectStepListItem);
 
   const setStatus = (nextStatus: FlowPlaybackStatus) => {
     if (status === nextStatus) {
@@ -123,12 +158,15 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
   };
 
   const moveToStep = (nextStepIndex: number) => {
+    const playbackQueue = getPlaybackQueue();
+    const currentStepIndex = getState().currentStepIndex;
+
     if (currentStepIndex === nextStepIndex) {
       elapsedMs = 0;
       return getState();
     }
 
-    currentStepIndex = nextStepIndex;
+    currentStepId = playbackQueue[nextStepIndex]?.id;
     elapsedMs = 0;
     const state = getState();
     if (state.currentStep) {
@@ -139,9 +177,54 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 
   const complete = () => setStatus("completed");
 
+  const selectReplacementStepId = (historyIndex: number, removedStep = false) => {
+    const nextStep = historySteps
+      .slice(removedStep ? historyIndex : historyIndex + 1)
+      .find((step) => step.playbackEnabled !== false);
+    const previousStep = findPreviousEnabledStep(
+      historySteps,
+      removedStep ? historyIndex : historyIndex
+    );
+
+    return nextStep?.id ?? previousStep?.id;
+  };
+
+  const reconcileCurrentStep = (replacementHistoryIndex: number, removedStep = false) => {
+    const playbackQueue = getPlaybackQueue();
+
+    if (playbackQueue.length === 0) {
+      currentStepId = undefined;
+      elapsedMs = 0;
+      status = "idle";
+      return getState();
+    }
+
+    if (currentStepId && playbackQueue.some((step) => step.id === currentStepId)) {
+      return getState();
+    }
+
+    const previousStepId = currentStepId;
+    currentStepId =
+      selectReplacementStepId(replacementHistoryIndex, removedStep) ?? playbackQueue[0]?.id;
+    elapsedMs = 0;
+    if (status === "completed") {
+      status = "paused";
+    }
+
+    const state = getState();
+    if (previousStepId !== currentStepId && state.currentStep) {
+      onStepChange?.(state.currentStep, state);
+    }
+
+    return state;
+  };
+
   return {
     getState,
+    getStepList,
     play: () => {
+      const playbackQueue = getPlaybackQueue();
+
       if (status === "completed" || playbackQueue.length === 0) {
         return getState();
       }
@@ -149,6 +232,8 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return setStatus("playing");
     },
     pause: () => {
+      const playbackQueue = getPlaybackQueue();
+
       if (status === "completed" || playbackQueue.length === 0) {
         return getState();
       }
@@ -156,6 +241,9 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return setStatus("paused");
     },
     next: () => {
+      const playbackQueue = getPlaybackQueue();
+      const currentStepIndex = getState().currentStepIndex;
+
       if (playbackQueue.length === 0) {
         return getState();
       }
@@ -167,6 +255,9 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return moveToStep(currentStepIndex + 1);
     },
     previous: () => {
+      const playbackQueue = getPlaybackQueue();
+      const currentStepIndex = getState().currentStepIndex;
+
       if (playbackQueue.length === 0 || currentStepIndex === 0) {
         elapsedMs = 0;
         return getState();
@@ -179,12 +270,15 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return moveToStep(currentStepIndex - 1);
     },
     reset: () => {
-      currentStepIndex = playbackQueue.length === 0 ? -1 : 0;
+      const playbackQueue = getPlaybackQueue();
+
+      currentStepId = playbackQueue[0]?.id;
       elapsedMs = 0;
       status = "idle";
       return getState();
     },
     goToStep: (stepId: string) => {
+      const playbackQueue = getPlaybackQueue();
       const nextStepIndex = playbackQueue.findIndex((step) => step.id === stepId);
 
       if (nextStepIndex === -1) {
@@ -192,6 +286,30 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       }
 
       return moveToStep(nextStepIndex);
+    },
+    setStepPlaybackEnabled: (stepId: string, playbackEnabled: boolean) => {
+      const historyIndex = historySteps.findIndex((step) => step.id === stepId);
+
+      if (historyIndex === -1) {
+        throw new FlowPlaybackError(`Flow playback step "${stepId}" does not exist.`);
+      }
+
+      historySteps = historySteps.map((step) =>
+        step.id === stepId ? { ...step, playbackEnabled } : step
+      );
+
+      return reconcileCurrentStep(historyIndex);
+    },
+    deleteStep: (stepId: string) => {
+      const historyIndex = historySteps.findIndex((step) => step.id === stepId);
+
+      if (historyIndex === -1) {
+        throw new FlowPlaybackError(`Flow playback step "${stepId}" does not exist.`);
+      }
+
+      historySteps = historySteps.filter((step) => step.id !== stepId);
+
+      return reconcileCurrentStep(historyIndex, true);
     },
     advanceBy: (elapsedDeltaMs: number) => {
       if (!Number.isFinite(elapsedDeltaMs) || elapsedDeltaMs < 0) {
@@ -207,6 +325,8 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       let remainingMs = elapsedDeltaMs;
 
       while (remainingMs > 0 && status === "playing") {
+        const playbackQueue = getPlaybackQueue();
+        const currentStepIndex = getState().currentStepIndex;
         const stepDurationMs = getStepDurationMs();
         const nextElapsedMs = elapsedMs + remainingMs;
 
@@ -232,6 +352,38 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
       return getState();
     }
   };
+}
+
+function projectStepListItem<Metadata>(step: FlowStep<Metadata>): FlowStepListItem {
+  return {
+    id: step.id,
+    type: step.type,
+    typeLabel: getStepTypeLabel(step.type),
+    title: step.title,
+    playbackEnabled: step.playbackEnabled !== false
+  };
+}
+
+function findPreviousEnabledStep<Metadata>(
+  steps: readonly FlowStep<Metadata>[],
+  beforeIndex: number
+) {
+  for (let index = beforeIndex - 1; index >= 0; index -= 1) {
+    const step = steps[index];
+
+    if (step?.playbackEnabled !== false) {
+      return step;
+    }
+  }
+
+  return undefined;
+}
+
+function getStepTypeLabel(type: FlowStepType) {
+  switch (type) {
+    case "highlight":
+      return "Highlight";
+  }
 }
 
 function validateOptions<Metadata>(options: CreateFlowPlaybackOptions<Metadata>) {
