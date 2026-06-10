@@ -391,6 +391,93 @@ describe("useFlowPlayback", () => {
     expect(result.current.activeEdgeIds).toEqual(["start-review", "review-finish"]);
   });
 
+  it("reconstructs nodes and edges in replay mode and exits on edit with final flow", () => {
+    const replayInitialNodes: Node[] = [
+      { id: "start", position: { x: 0, y: 0 }, data: { label: "Start" } }
+    ];
+    const replayInitialEdges: Edge[] = [];
+    const replaySteps: FlowPlaybackStep[] = [
+      {
+        id: "add-finish",
+        type: "node-add",
+        title: "Add finish",
+        node: { id: "finish", position: { x: 120, y: 0 }, data: { label: "Finish" } }
+      },
+      {
+        id: "silent-drag",
+        type: "node-drag",
+        title: "Silent drag",
+        playbackEnabled: false,
+        nodeId: "finish",
+        from: { x: 120, y: 0 },
+        to: { x: 180, y: 40 }
+      },
+      {
+        id: "edit-start",
+        type: "node-edit",
+        title: "Rename start",
+        before: replayInitialNodes[0]!,
+        after: {
+          id: "start",
+          position: { x: 0, y: 0 },
+          data: { label: "Kickoff" }
+        }
+      }
+    ];
+    const onReplayExit = vi.fn();
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes: replayInitialNodes,
+        edges: replayInitialEdges,
+        steps: replaySteps,
+        defaultDurationMs: 1_000,
+        replay: {
+          initialNodes: replayInitialNodes,
+          initialEdges: replayInitialEdges
+        },
+        onReplayExit
+      })
+    );
+
+    expect(result.current.isReplayMode).toBe(true);
+    expect(result.current.nodes.map((node) => node.id)).toEqual(["start", "finish"]);
+    expect(result.current.nodes.find((node) => node.id === "finish")?.position).toEqual({
+      x: 120,
+      y: 0
+    });
+
+    act(() => result.current.next());
+
+    expect(result.current.nodes.find((node) => node.id === "start")?.data.label).toBe("Kickoff");
+    expect(result.current.nodes.find((node) => node.id === "finish")?.position).toEqual({
+      x: 180,
+      y: 40
+    });
+
+    act(() => result.current.previous());
+
+    expect(result.current.nodes.find((node) => node.id === "finish")?.position).toEqual({
+      x: 120,
+      y: 0
+    });
+
+    act(() =>
+      result.current.recordNodeAdd({
+        node: { id: "review", position: { x: 60, y: 20 }, data: { label: "Review" } }
+      })
+    );
+
+    expect(result.current.isReplayMode).toBe(false);
+    expect(onReplayExit).toHaveBeenCalledWith({
+      nodes: [
+        { id: "start", position: { x: 0, y: 0 }, data: { label: "Kickoff" } },
+        { id: "finish", position: { x: 180, y: 40 }, data: { label: "Finish" } }
+      ],
+      edges: []
+    });
+    expect(result.current.stepList).toHaveLength(4);
+  });
+
   it("reports diagnostics for unknown dynamic node and edge references", () => {
     const { result } = renderHook(() =>
       useFlowPlayback({
