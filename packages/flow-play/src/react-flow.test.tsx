@@ -478,6 +478,46 @@ describe("useFlowPlayback", () => {
     expect(result.current.stepList).toHaveLength(4);
   });
 
+  it("lets callers start in highlight mode and switch replay reconstruction on", () => {
+    const replayInitialNodes: Node[] = [
+      { id: "start", position: { x: 0, y: 0 }, data: { label: "Start" } }
+    ];
+    const replaySteps: FlowPlaybackStep[] = [
+      {
+        id: "add-finish",
+        type: "node-add",
+        title: "Add finish",
+        node: { id: "finish", position: { x: 120, y: 0 }, data: { label: "Finish" } }
+      }
+    ];
+    const { result } = renderHook(() =>
+      useFlowPlayback({
+        nodes: replayInitialNodes,
+        edges: [],
+        steps: replaySteps,
+        defaultDurationMs: 1_000,
+        initialReplayMode: false,
+        replay: {
+          initialNodes: replayInitialNodes,
+          initialEdges: []
+        }
+      })
+    );
+
+    expect(result.current.isReplayMode).toBe(false);
+    expect(result.current.nodes.map((node) => node.id)).toEqual(["start"]);
+
+    act(() => result.current.enterReplayMode());
+
+    expect(result.current.isReplayMode).toBe(true);
+    expect(result.current.nodes.map((node) => node.id)).toEqual(["start", "finish"]);
+
+    act(() => result.current.exitReplayMode());
+
+    expect(result.current.isReplayMode).toBe(false);
+    expect(result.current.nodes.map((node) => node.id)).toEqual(["start"]);
+  });
+
   it("reports diagnostics for unknown dynamic node and edge references", () => {
     const { result } = renderHook(() =>
       useFlowPlayback({
