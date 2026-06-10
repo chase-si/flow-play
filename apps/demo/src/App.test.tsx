@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { App } from "./App";
 
 describe("App", () => {
-  it("renders an interactive React Flow playback review surface", () => {
+  it("renders the edit, curate, then play workflow with accessible playback states", () => {
     render(<App />);
 
     expect(
@@ -12,12 +12,22 @@ describe("App", () => {
     expect(
       screen.getByRole("application", { name: "Customer onboarding flow canvas" })
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Play" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Pause" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Previous step" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Next step" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Reset playback" })).toBeDisabled();
+    const editControls = screen.getByRole("group", { name: "Edit flow" });
+    const stepList = screen.getByRole("list", { name: "Curated playback steps" });
+    const modeSwitch = screen.getByRole("radiogroup", { name: "Playback mode" });
+    const playbackControls = screen.getByRole("group", { name: "Playback controls" });
+
+    expect(editControls.compareDocumentPosition(stepList)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(stepList.compareDocumentPosition(modeSwitch)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(modeSwitch.compareDocumentPosition(playbackControls)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(playbackControls).getByRole("button", { name: "Play" })).toBeEnabled();
+    expect(within(playbackControls).getByRole("button", { name: "Pause" })).toBeDisabled();
+    expect(within(playbackControls).getByRole("button", { name: "Previous step" })).toBeDisabled();
+    expect(within(playbackControls).getByRole("button", { name: "Next step" })).toBeEnabled();
+    expect(within(playbackControls).getByRole("button", { name: "Reset playback" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Guided viewport" })).not.toBeChecked();
+    expect(within(modeSwitch).getByRole("radio", { name: "Highlight" })).toBeChecked();
+    expect(within(modeSwitch).getByRole("radio", { name: "Replay" })).not.toBeChecked();
     expect(
       screen.getByRole("heading", { level: 2, name: "Collect request context" })
     ).toBeInTheDocument();
@@ -25,8 +35,8 @@ describe("App", () => {
       screen.getByText("Capture the customer signal and prepare the handoff path.")
     ).toBeInTheDocument();
 
-    const stepList = screen.getByRole("list", { name: "Playback steps" });
     expect(within(stepList).getAllByText("Highlight")).toHaveLength(3);
+    expect(within(stepList).getAllByText("Enabled")).toHaveLength(3);
     expect(
       within(stepList).getByRole("button", { name: "Validate routing conditions" })
     ).toBeInTheDocument();
@@ -52,8 +62,9 @@ describe("App", () => {
         name: "Include Collect request context in playback"
       })
     ).not.toBeChecked();
+    expect(within(stepList).getByText("Disabled")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Next step" }));
+    fireEvent.click(within(playbackControls).getByRole("button", { name: "Next step" }));
     expect(
       screen.getByRole("heading", { level: 2, name: "Complete the handoff" })
     ).toBeInTheDocument();
@@ -65,19 +76,28 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Validate routing conditions" })
     ).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Deleted playback steps" })).toHaveTextContent(
+      "Deleted step: Complete the handoff"
+    );
 
     fireEvent.click(
       within(stepList).getByRole("switch", {
         name: "Include Validate routing conditions in playback"
       })
     );
-    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+    expect(within(playbackControls).getByRole("button", { name: "Play" })).toBeDisabled();
     expect(
       screen.getByRole("heading", { level: 2, name: "No playback steps enabled" })
     ).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Playback queue state" })).toHaveTextContent(
+      "No playback steps enabled"
+    );
 
     fireEvent.click(screen.getByRole("switch", { name: "Guided viewport" }));
     expect(screen.getByRole("switch", { name: "Guided viewport" })).toBeChecked();
+
+    fireEvent.click(within(modeSwitch).getByRole("radio", { name: "Replay" }));
+    expect(within(modeSwitch).getByRole("radio", { name: "Replay" })).toBeChecked();
   });
 
   it("records visible typed steps from demo node edit controls", () => {
@@ -88,11 +108,16 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete reviewer node" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete request edge" }));
 
-    const stepList = screen.getByRole("list", { name: "Playback steps" });
+    const stepList = screen.getByRole("list", { name: "Curated playback steps" });
     expect(within(stepList).getByText("Node add")).toBeInTheDocument();
     expect(within(stepList).getByRole("button", { name: "Add Follow-up review" })).toBeEnabled();
     expect(within(stepList).getByText("Node edit")).toBeInTheDocument();
     expect(within(stepList).getByRole("button", { name: "Edit Reviewer queue" })).toBeEnabled();
+    expect(
+      within(stepList).getByRole("switch", {
+        name: "Include Edit Reviewer queue in playback"
+      })
+    ).toBeChecked();
     expect(within(stepList).getByText("Node delete")).toBeInTheDocument();
     expect(
       within(stepList).getByRole("button", { name: "Delete Review queue updated" })

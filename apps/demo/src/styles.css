@@ -113,6 +113,11 @@ h2 {
   padding: 6px 10px;
 }
 
+.workflow-stack {
+  display: grid;
+  gap: 16px;
+}
+
 .control-row {
   display: grid;
   gap: 14px;
@@ -219,6 +224,7 @@ h2 {
 .step-copy {
   display: grid;
   gap: 2px;
+  min-width: 0;
 }
 
 .step-type {
@@ -226,6 +232,24 @@ h2 {
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.step-state {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  margin-left: auto;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.step-state.enabled {
+  background: #e8f5f2;
+  border-color: #b8ddd4;
+  color: #0f4f49;
 }
 
 .step-button.active {
@@ -259,6 +283,44 @@ h2 {
   color: #7f1d1d;
   min-height: 34px;
   padding: 0 12px;
+}
+
+.queue-status {
+  color: #526071;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.mode-controls {
+  background: #f8fafc;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 4px;
+}
+
+.mode-controls label {
+  align-items: center;
+  border-radius: 6px;
+  color: #526071;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.mode-controls label:has(input:checked) {
+  background: #ffffff;
+  color: #0f4f49;
+  font-weight: 700;
+}
+
+.mode-controls input {
+  accent-color: #0f766e;
 }
 
 .canvas-shell {

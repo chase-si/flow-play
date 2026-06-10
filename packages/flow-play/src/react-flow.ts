@@ -9,8 +9,6 @@ import type {
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import {
   createFlowPlayback,
-  reconstructFlowState,
-  resolveReplayHistoryIndex,
   type CreateFlowPlaybackOptions,
   type FlowNodeSnapshot,
   type FlowPlaybackState,
@@ -41,6 +39,7 @@ export interface UseFlowPlaybackOptions<
   nodes: readonly Node<NodeData>[];
   edges: readonly Edge<EdgeData>[];
   replay?: FlowReplaySource;
+  initialReplayMode?: boolean;
   onReplayExit?: (state: FlowReplayState) => void;
   viewport?: {
     enabled?: boolean;
@@ -61,6 +60,8 @@ export interface UseFlowPlaybackResult<
   activeEdgeIds: string[];
   diagnostics: FlowPlaybackDiagnostic[];
   isReplayMode: boolean;
+  enterReplayMode: () => void;
+  exitReplayMode: () => void;
   play: () => void;
   pause: () => void;
   next: () => void;
@@ -95,6 +96,7 @@ export function useFlowPlayback<
     onStatusChange,
     onStepChange,
     stepTypeLabels,
+    initialReplayMode,
     replay,
     onReplayExit
   } = options;
@@ -128,7 +130,9 @@ export function useFlowPlayback<
   const [state, setState] = useState(() => playback.getState());
   const [stepList, setStepList] = useState(() => playback.getStepList());
   const [historySteps, setHistorySteps] = useState(() => playback.getSteps());
-  const [isReplayMode, setIsReplayMode] = useState(() => replay !== undefined);
+  const [isReplayMode, setIsReplayMode] = useState(
+    () => replay !== undefined && (initialReplayMode ?? true)
+  );
   const dragStartPositions = useRef(new Map<string, FlowNodeSnapshot>());
   const latestPlayback = useRef(playback);
   latestPlayback.current = playback;
@@ -252,6 +256,12 @@ export function useFlowPlayback<
     activeEdgeIds,
     diagnostics,
     isReplayMode,
+    enterReplayMode: () => {
+      if (replay !== undefined) {
+        setIsReplayMode(true);
+      }
+    },
+    exitReplayMode: () => setIsReplayMode(false),
     play: () => apply(latestPlayback.current.play()),
     pause: () => apply(latestPlayback.current.pause()),
     next: () => apply(latestPlayback.current.next()),
@@ -269,15 +279,18 @@ export function useFlowPlayback<
         return;
       }
 
-      if (startNode.position.x === node.position.x && startNode.position.y === node.position.y) {
+      const from = startNode.position;
+      const to = node.position;
+
+      if (from.x === to.x && from.y === to.y) {
         return;
       }
 
       applyRecordedStep(() =>
         latestPlayback.current.recordNodeDrag({
           nodeId: node.id,
-          from: startNode.position,
-          to: node.position
+          from,
+          to
         })
       );
     },

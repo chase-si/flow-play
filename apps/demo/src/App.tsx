@@ -102,6 +102,7 @@ function PlaybackDemo() {
   const [guidedViewport, setGuidedViewport] = useState(false);
   const [demoNodes, setDemoNodes] = useState<Node<DemoNodeData>[]>(initialNodes);
   const [demoEdges, setDemoEdges] = useState<Edge<DemoEdgeData>[]>(initialEdges);
+  const [deletedStepTitles, setDeletedStepTitles] = useState<string[]>([]);
   const onNodesChange = (changes: NodeChange<Node<DemoNodeData>>[]) => {
     setDemoNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
   };
@@ -111,8 +112,18 @@ function PlaybackDemo() {
     steps,
     defaultDurationMs: 2_400,
     formatNodeLabel: formatDemoNodeLabel,
+    initialReplayMode: false,
+    onReplayExit: (state) => {
+      setDemoNodes(state.nodes as Node<DemoNodeData>[]);
+      setDemoEdges(state.edges as Edge<DemoEdgeData>[]);
+    },
+    replay: {
+      initialNodes,
+      initialEdges
+    },
     viewport: { enabled: guidedViewport, reactFlow }
   });
+  const hasPlaybackQueue = playback.stepCount > 0;
 
   useEffect(() => {
     if (playback.status !== "playing") {
@@ -164,6 +175,16 @@ function PlaybackDemo() {
     [playback.edges]
   );
 
+  const deleteStep = (stepId: string) => {
+    const step = playback.stepList.find((candidate) => candidate.id === stepId);
+
+    if (step) {
+      setDeletedStepTitles((currentTitles) => [...currentTitles, step.title]);
+    }
+
+    playback.deleteStep(stepId);
+  };
+
   return (
     <main className="app-shell">
       <section className="review-panel" aria-labelledby="demo-title">
@@ -176,11 +197,8 @@ function PlaybackDemo() {
           </p>
         </div>
 
-        <CurrentStep playback={playback} />
-
-        <div className="control-row">
-          <FlowPlaybackControls className="playback-controls" playback={playback} />
-          <div className="edit-controls" aria-label="Node edit controls">
+        <div className="workflow-stack">
+          <div className="edit-controls" role="group" aria-label="Edit flow">
             <button onClick={() => addFollowUpNode(setDemoNodes, playback)} type="button">
               Add follow-up node
             </button>
@@ -202,61 +220,109 @@ function PlaybackDemo() {
               Delete request edge
             </button>
           </div>
-          <label className="viewport-toggle">
-            <input
-              checked={guidedViewport}
-              onChange={(event) => setGuidedViewport(event.currentTarget.checked)}
-              role="switch"
-              type="checkbox"
-            />
-            <span>Guided viewport</span>
-          </label>
-        </div>
 
-        <ol aria-label="Playback steps" className="step-list">
-          {playback.stepList.map((step, index) => (
-            <li key={step.id}>
-              <button
-                disabled={!step.playbackEnabled}
-                aria-current={playback.currentStep?.id === step.id ? "step" : undefined}
-                aria-label={step.title}
-                className={
-                  playback.currentStep?.id === step.id ? "step-button active" : "step-button"
-                }
-                onClick={() => playback.goToStep(step.id)}
-                type="button"
-              >
-                <span className="step-index">{String(index + 1).padStart(2, "0")}</span>
-                <span className="step-copy">
-                  <span className="step-type">{step.typeLabel}</span>
-                  <span>{step.title}</span>
-                </span>
-              </button>
-              <div className="step-actions">
-                <label className="step-toggle">
-                  <input
-                    aria-label={`Include ${step.title} in playback`}
-                    checked={step.playbackEnabled}
-                    onChange={(event) =>
-                      playback.setStepPlaybackEnabled(step.id, event.currentTarget.checked)
-                    }
-                    role="switch"
-                    type="checkbox"
-                  />
-                  <span>Playback</span>
-                </label>
+          <ol aria-label="Curated playback steps" className="step-list">
+            {playback.stepList.map((step, index) => (
+              <li key={step.id}>
                 <button
-                  aria-label={`Delete ${step.title}`}
-                  className="step-delete"
-                  onClick={() => playback.deleteStep(step.id)}
+                  disabled={!step.playbackEnabled}
+                  aria-current={playback.currentStep?.id === step.id ? "step" : undefined}
+                  aria-label={step.title}
+                  className={
+                    playback.currentStep?.id === step.id ? "step-button active" : "step-button"
+                  }
+                  onClick={() => playback.goToStep(step.id)}
                   type="button"
                 >
-                  Delete
+                  <span className="step-index">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="step-copy">
+                    <span className="step-type">{step.typeLabel}</span>
+                    <span>{step.title}</span>
+                  </span>
+                  <span className={step.playbackEnabled ? "step-state enabled" : "step-state"}>
+                    {step.playbackEnabled ? "Enabled" : "Disabled"}
+                  </span>
                 </button>
-              </div>
-            </li>
-          ))}
-        </ol>
+                <div className="step-actions">
+                  <label className="step-toggle">
+                    <input
+                      aria-label={`Include ${step.title} in playback`}
+                      checked={step.playbackEnabled}
+                      onChange={(event) =>
+                        playback.setStepPlaybackEnabled(step.id, event.currentTarget.checked)
+                      }
+                      role="switch"
+                      type="checkbox"
+                    />
+                    <span>Playback</span>
+                  </label>
+                  <button
+                    aria-label={`Delete ${step.title}`}
+                    className="step-delete"
+                    onClick={() => deleteStep(step.id)}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <p className="queue-status" role="status" aria-label="Playback queue state">
+            {hasPlaybackQueue
+              ? `${playback.stepCount} playback ${
+                  playback.stepCount === 1 ? "step is" : "steps are"
+                } enabled`
+              : "No playback steps enabled"}
+          </p>
+          <p className="queue-status" role="status" aria-label="Deleted playback steps">
+            {deletedStepTitles.length > 0
+              ? deletedStepTitles.map((title) => `Deleted step: ${title}`).join(". ")
+              : "No deleted playback steps"}
+          </p>
+
+          <div className="mode-controls" role="radiogroup" aria-label="Playback mode">
+            <label>
+              <input
+                checked={!playback.isReplayMode}
+                name="playback-mode"
+                onChange={() => playback.exitReplayMode()}
+                type="radio"
+              />
+              <span>Highlight</span>
+            </label>
+            <label>
+              <input
+                checked={playback.isReplayMode}
+                name="playback-mode"
+                onChange={() => playback.enterReplayMode()}
+                type="radio"
+              />
+              <span>Replay</span>
+            </label>
+          </div>
+
+          <div className="control-row">
+            <FlowPlaybackControls
+              aria-label="Playback controls"
+              className="playback-controls"
+              playback={playback}
+              role="group"
+            />
+            <label className="viewport-toggle">
+              <input
+                checked={guidedViewport}
+                onChange={(event) => setGuidedViewport(event.currentTarget.checked)}
+                role="switch"
+                type="checkbox"
+              />
+              <span>Guided viewport</span>
+            </label>
+          </div>
+
+          <CurrentStep playback={playback} />
+        </div>
       </section>
 
       <section
