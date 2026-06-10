@@ -9,10 +9,14 @@ import type {
 import type { Edge, Node, ReactFlowInstance } from "@xyflow/react";
 import {
   createFlowPlayback,
+  reconstructFlowState,
+  resolveReplayHistoryIndex,
   type CreateFlowPlaybackOptions,
   type FlowNodeSnapshot,
   type FlowPlaybackState,
   type FlowPlaybackStep,
+  type FlowReplaySource,
+  type FlowReplayState,
   type FlowStep,
   type FlowStepListItem,
   type RecordNodeAddOptions,
@@ -36,6 +40,8 @@ export interface UseFlowPlaybackOptions<
 > extends CreateFlowPlaybackOptions<Metadata> {
   nodes: readonly Node<NodeData>[];
   edges: readonly Edge<EdgeData>[];
+  replay?: FlowReplaySource;
+  onReplayExit?: (state: FlowReplayState) => void;
   viewport?: {
     enabled?: boolean;
     reactFlow?: Pick<ReactFlowInstance, "fitView" | "setViewport">;
@@ -54,6 +60,7 @@ export interface UseFlowPlaybackResult<
   activeNodeIds: string[];
   activeEdgeIds: string[];
   diagnostics: FlowPlaybackDiagnostic[];
+  isReplayMode: boolean;
   play: () => void;
   pause: () => void;
   next: () => void;
@@ -87,24 +94,41 @@ export function useFlowPlayback<
     formatNodeLabel,
     onStatusChange,
     onStepChange,
-    stepTypeLabels
+    stepTypeLabels,
+    replay,
+    onReplayExit
   } = options;
   const viewport = options.viewport;
+  const replayInitialNodes = replay?.initialNodes;
+  const replayInitialEdges = replay?.initialEdges;
   const playback = useMemo(
     () =>
       createFlowPlayback({
         steps,
         defaultDurationMs,
+        ...(replayInitialNodes === undefined || replayInitialEdges === undefined
+          ? {}
+          : { replay: { initialNodes: replayInitialNodes, initialEdges: replayInitialEdges } }),
         ...(formatNodeLabel === undefined ? {} : { formatNodeLabel }),
         ...(onStatusChange === undefined ? {} : { onStatusChange }),
         ...(onStepChange === undefined ? {} : { onStepChange }),
         ...(stepTypeLabels === undefined ? {} : { stepTypeLabels })
       }),
-    [defaultDurationMs, formatNodeLabel, onStatusChange, onStepChange, stepTypeLabels, steps]
+    [
+      defaultDurationMs,
+      formatNodeLabel,
+      onStatusChange,
+      onStepChange,
+      replayInitialEdges,
+      replayInitialNodes,
+      stepTypeLabels,
+      steps
+    ]
   );
   const [state, setState] = useState(() => playback.getState());
   const [stepList, setStepList] = useState(() => playback.getStepList());
   const [historySteps, setHistorySteps] = useState(() => playback.getSteps());
+  const [isReplayMode, setIsReplayMode] = useState(() => replay !== undefined);
   const dragStartPositions = useRef(new Map<string, FlowNodeSnapshot>());
   const latestPlayback = useRef(playback);
   latestPlayback.current = playback;
@@ -122,35 +146,51 @@ export function useFlowPlayback<
   const activeNodeIdSet = useMemo(() => new Set(activeNodeIds), [activeNodeIds]);
   const activeEdgeIdSet = useMemo(() => new Set(activeEdgeIds), [activeEdgeIds]);
 
+  const flowNodes = useMemo(() => {
+    if (!isReplayMode || replay === undefined) {
+      return nodes;
+    }
+
+    return playback.getReconstructedFlow().nodes as Node<NodeData>[];
+  }, [isReplayMode, nodes, playback, replay, state.currentStep, historySteps]);
+
+  const flowEdges = useMemo(() => {
+    if (!isReplayMode || replay === undefined) {
+      return edges;
+    }
+
+    return playback.getReconstructedFlow().edges as Edge<EdgeData>[];
+  }, [isReplayMode, edges, playback, replay, state.currentStep, historySteps]);
+
   const enhancedNodes = useMemo(
     () =>
-      nodes.map((node) => ({
+      flowNodes.map((node) => ({
         ...node,
         data: {
           ...(node.data ?? {}),
           flowPlayActive: activeNodeIdSet.has(node.id)
         } as NodeData & { flowPlayActive: boolean }
       })),
-    [activeNodeIdSet, nodes]
+    [activeNodeIdSet, flowNodes]
   );
   const enhancedEdges = useMemo(
     () =>
-      edges.map((edge) => ({
+      flowEdges.map((edge) => ({
         ...edge,
         data: {
           ...(edge.data ?? {}),
           flowPlayActive: activeEdgeIdSet.has(edge.id)
         } as EdgeData & { flowPlayActive: boolean }
       })),
-    [activeEdgeIdSet, edges]
+    [activeEdgeIdSet, flowEdges]
   );
 
   const diagnostics = useMemo(
     () =>
       state.currentStep
-        ? collectDiagnostics(nodes, edges, state.currentStep.id, activeNodeIds, activeEdgeIds)
+        ? collectDiagnostics(flowNodes, flowEdges, state.currentStep.id, activeNodeIds, activeEdgeIds)
         : [],
-    [activeEdgeIds, activeNodeIds, edges, nodes, state.currentStep]
+    [activeEdgeIds, activeNodeIds, flowEdges, flowNodes, state.currentStep]
   );
 
   const applyViewport = (nextState: FlowPlaybackState<Metadata>) => {
@@ -187,6 +227,21 @@ export function useFlowPlayback<
     applyViewport(nextState);
   };
 
+  const exitReplayForEdit = () => {
+    if (!isReplayMode || replay === undefined) {
+      return;
+    }
+
+    const finalFlow = latestPlayback.current.getFinalReconstructedFlow();
+    onReplayExit?.(finalFlow);
+    setIsReplayMode(false);
+  };
+
+  const applyRecordedStep = (record: () => FlowPlaybackState<Metadata>) => {
+    exitReplayForEdit();
+    apply(record());
+  };
+
   return {
     ...state,
     steps: playbackSteps,
@@ -196,6 +251,7 @@ export function useFlowPlayback<
     activeNodeIds,
     activeEdgeIds,
     diagnostics,
+    isReplayMode,
     play: () => apply(latestPlayback.current.play()),
     pause: () => apply(latestPlayback.current.pause()),
     next: () => apply(latestPlayback.current.next()),
@@ -217,7 +273,7 @@ export function useFlowPlayback<
         return;
       }
 
-      apply(
+      applyRecordedStep(() =>
         latestPlayback.current.recordNodeDrag({
           nodeId: node.id,
           from: startNode.position,
@@ -225,14 +281,16 @@ export function useFlowPlayback<
         })
       );
     },
-    recordNodeAdd: (recordOptions) => apply(latestPlayback.current.recordNodeAdd(recordOptions)),
-    recordNodeEdit: (recordOptions) => apply(latestPlayback.current.recordNodeEdit(recordOptions)),
+    recordNodeAdd: (recordOptions) =>
+      applyRecordedStep(() => latestPlayback.current.recordNodeAdd(recordOptions)),
+    recordNodeEdit: (recordOptions) =>
+      applyRecordedStep(() => latestPlayback.current.recordNodeEdit(recordOptions)),
     recordNodeDelete: (recordOptions) =>
-      apply(latestPlayback.current.recordNodeDelete(recordOptions)),
+      applyRecordedStep(() => latestPlayback.current.recordNodeDelete(recordOptions)),
     recordEdgeDelete: (recordOptions) =>
-      apply(latestPlayback.current.recordEdgeDelete(recordOptions)),
+      applyRecordedStep(() => latestPlayback.current.recordEdgeDelete(recordOptions)),
     recordEdgeConnect: (recordOptions) =>
-      apply(latestPlayback.current.recordEdgeConnect(recordOptions)),
+      applyRecordedStep(() => latestPlayback.current.recordEdgeConnect(recordOptions)),
     setStepPlaybackEnabled: (stepId, playbackEnabled) =>
       apply(latestPlayback.current.setStepPlaybackEnabled(stepId, playbackEnabled)),
     deleteStep: (stepId) => apply(latestPlayback.current.deleteStep(stepId)),

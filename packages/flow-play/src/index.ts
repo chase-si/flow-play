@@ -1,3 +1,20 @@
+import {
+  reconstructFinalFlowState,
+  reconstructFlowState,
+  resolveReplayHistoryIndex,
+  type FlowReplayState
+} from "./flow-replay";
+
+export type { FlowReplayState } from "./flow-replay";
+export {
+  applyFlowStepToReplayState,
+  cloneFlowReplayState,
+  reconstructFinalFlowState,
+  reconstructFlowState,
+  reconstructFlowStateForStepId,
+  resolveReplayHistoryIndex
+} from "./flow-replay";
+
 export type FlowPlaybackStatus = "idle" | "playing" | "paused" | "completed";
 
 export interface FlowPlaybackViewportIntent {
@@ -164,9 +181,15 @@ export interface FlowStepListItem {
   playbackEnabled: boolean;
 }
 
+export interface FlowReplaySource {
+  initialNodes: readonly FlowNodeSnapshot[];
+  initialEdges: readonly FlowEdgeSnapshot[];
+}
+
 export interface CreateFlowPlaybackOptions<Metadata = Record<string, unknown>> {
   steps: readonly FlowStep<Metadata>[];
   defaultDurationMs: number;
+  replay?: FlowReplaySource;
   formatNodeLabel?: (node: FlowNodeLabelReference) => string | undefined;
   stepTypeLabels?: Partial<Record<FlowStepType, string>>;
   onStatusChange?: (status: FlowPlaybackStatus, state: FlowPlaybackState<Metadata>) => void;
@@ -235,6 +258,8 @@ export interface FlowPlaybackController<Metadata = Record<string, unknown>> {
   getState: () => FlowPlaybackState<Metadata>;
   getSteps: () => FlowStep<Metadata>[];
   getStepList: () => FlowStepListItem[];
+  getReconstructedFlow: () => FlowReplayState;
+  getFinalReconstructedFlow: () => FlowReplayState;
   recordNodeDrag: (options: RecordNodeDragOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordNodeAdd: (options: RecordNodeAddOptions<Metadata>) => FlowPlaybackState<Metadata>;
   recordNodeEdit: (options: RecordNodeEditOptions<Metadata>) => FlowPlaybackState<Metadata>;
@@ -277,7 +302,8 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
 ): FlowPlaybackController<Metadata> {
   validateOptions(options);
 
-  const { steps, defaultDurationMs, formatNodeLabel, onStatusChange, onStepChange } = options;
+  const { steps, defaultDurationMs, formatNodeLabel, onStatusChange, onStepChange, replay } =
+    options;
   let historySteps = [...steps];
   let currentStepId = projectPlaybackQueue(historySteps)[0]?.id;
   let elapsedMs = 0;
@@ -398,10 +424,43 @@ export function createFlowPlayback<Metadata = Record<string, unknown>>(
     return state;
   };
 
+  const getReconstructedFlow = (): FlowReplayState => {
+    if (!replay) {
+      throw new FlowPlaybackError(
+        "Flow playback replay requires initialNodes and initialEdges via the replay option."
+      );
+    }
+
+    const state = getState();
+
+    return reconstructFlowState({
+      initialNodes: replay.initialNodes,
+      initialEdges: replay.initialEdges,
+      steps: historySteps,
+      throughHistoryIndex: resolveReplayHistoryIndex(historySteps, state.currentStep)
+    });
+  };
+
+  const getFinalReconstructedFlow = (): FlowReplayState => {
+    if (!replay) {
+      throw new FlowPlaybackError(
+        "Flow playback replay requires initialNodes and initialEdges via the replay option."
+      );
+    }
+
+    return reconstructFinalFlowState({
+      initialNodes: replay.initialNodes,
+      initialEdges: replay.initialEdges,
+      steps: historySteps
+    });
+  };
+
   return {
     getState,
     getSteps,
     getStepList,
+    getReconstructedFlow,
+    getFinalReconstructedFlow,
     recordNodeDrag: (recordOptions) => {
       const label = formatNodeLabel?.({ id: recordOptions.nodeId }) ?? recordOptions.nodeId;
       const step = {
