@@ -293,9 +293,10 @@ describe("useFlowPlayback", () => {
       edge: connectedEdge
     });
     expect(result.current.activeEdgeIds).toEqual(["start-review"]);
-    expect(result.current.edges.find((edge) => edge.id === "start-review")?.data.flowPlayActive).toBe(
-      true
-    );
+    const activeEdge = result.current.edges.find((edge) => edge.id === "start-review");
+
+    expect(activeEdge).toBeDefined();
+    expect(activeEdge!.data?.flowPlayActive).toBe(true);
   });
 
   it("records explicit node and edge deletion steps with complete payloads", () => {

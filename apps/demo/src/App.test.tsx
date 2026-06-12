@@ -12,14 +12,17 @@ describe("App", () => {
     expect(
       screen.getByRole("application", { name: "Customer onboarding flow canvas" })
     ).toBeInTheDocument();
-    const editControls = screen.getByRole("group", { name: "Edit flow" });
+    const controlsPanel = screen.getByRole("complementary", { name: "Playback controls panel" });
+    const timelinePanel = screen.getByRole("complementary", { name: "Step timeline panel" });
     const stepList = screen.getByRole("list", { name: "Curated playback steps" });
     const modeSwitch = screen.getByRole("radiogroup", { name: "Playback mode" });
     const playbackControls = screen.getByRole("group", { name: "Playback controls" });
 
-    expect(editControls.compareDocumentPosition(stepList)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(stepList.compareDocumentPosition(modeSwitch)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(modeSwitch.compareDocumentPosition(playbackControls)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(controlsPanel).toContainElement(playbackControls);
+    expect(controlsPanel).toContainElement(modeSwitch);
+    expect(timelinePanel).toContainElement(stepList);
+    expect(screen.getByRole("button", { name: "Hide playback controls panel" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Hide step timeline panel" })).toBeEnabled();
     expect(within(playbackControls).getByRole("button", { name: "Play" })).toBeEnabled();
     expect(within(playbackControls).getByRole("button", { name: "Pause" })).toBeDisabled();
     expect(within(playbackControls).getByRole("button", { name: "Previous step" })).toBeDisabled();
@@ -87,8 +90,11 @@ describe("App", () => {
     );
     expect(within(playbackControls).getByRole("button", { name: "Play" })).toBeDisabled();
     expect(
-      screen.getByRole("heading", { level: 2, name: "No playback steps enabled" })
-    ).toBeInTheDocument();
+      within(timelinePanel).getAllByRole("heading", {
+        level: 2,
+        name: "No playback steps enabled"
+      }).length
+    ).toBeGreaterThan(0);
     expect(screen.getByRole("status", { name: "Playback queue state" })).toHaveTextContent(
       "No playback steps enabled"
     );
@@ -100,9 +106,37 @@ describe("App", () => {
     expect(within(modeSwitch).getByRole("radio", { name: "Replay" })).toBeChecked();
   });
 
+  it("collapses and restores the split side panels", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide playback controls panel" }));
+    expect(
+      screen.queryByRole("complementary", { name: "Playback controls panel" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: "Collapsed playback controls panel" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide step timeline panel" }));
+    expect(
+      screen.queryByRole("complementary", { name: "Step timeline panel" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("complementary", { name: "Collapsed step timeline panel" })
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show playback controls panel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show step timeline panel" }));
+    expect(
+      screen.getByRole("complementary", { name: "Playback controls panel" })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Step timeline panel" })).toBeInTheDocument();
+  });
+
   it("records visible typed steps from demo node edit controls", () => {
     render(<App />);
 
+    fireEvent.click(screen.getByText("Edit flow"));
     fireEvent.click(screen.getByRole("button", { name: "Add follow-up node" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit reviewer label" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete reviewer node" }));
