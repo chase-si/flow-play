@@ -274,35 +274,6 @@ h2 {
   min-width: 0;
 }
 
-.mode-controls {
-  background: #f8fafc;
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 4px;
-}
-
-.mode-controls label {
-  align-items: center;
-  border-radius: 6px;
-  color: #526071;
-  cursor: pointer;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  min-height: 36px;
-  padding: 0 10px;
-}
-
-.mode-controls label:has(input:checked) {
-  background: #ffffff;
-  color: #0f4f49;
-  font-weight: 700;
-}
-
-.mode-controls input,
 .viewport-toggle input,
 .step-toggle input {
   accent-color: #0f766e;

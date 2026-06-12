@@ -15,11 +15,9 @@ describe("App", () => {
     const controlsPanel = screen.getByRole("complementary", { name: "Playback controls panel" });
     const timelinePanel = screen.getByRole("complementary", { name: "Step timeline panel" });
     const stepList = screen.getByRole("list", { name: "Curated playback steps" });
-    const modeSwitch = screen.getByRole("radiogroup", { name: "Playback mode" });
     const playbackControls = screen.getByRole("group", { name: "Playback controls" });
 
     expect(controlsPanel).toContainElement(playbackControls);
-    expect(controlsPanel).toContainElement(modeSwitch);
     expect(timelinePanel).toContainElement(stepList);
     expect(screen.getByRole("button", { name: "Hide playback controls panel" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Hide step timeline panel" })).toBeEnabled();
@@ -29,8 +27,9 @@ describe("App", () => {
     expect(within(playbackControls).getByRole("button", { name: "Next step" })).toBeEnabled();
     expect(within(playbackControls).getByRole("button", { name: "Reset playback" })).toBeDisabled();
     expect(screen.getByRole("switch", { name: "Guided viewport" })).not.toBeChecked();
-    expect(within(modeSwitch).getByRole("radio", { name: "Highlight" })).toBeChecked();
-    expect(within(modeSwitch).getByRole("radio", { name: "Replay" })).not.toBeChecked();
+    expect(screen.queryByRole("radiogroup", { name: "Playback mode" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Highlight" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Replay" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: "Collect request context" })
     ).toBeInTheDocument();
@@ -101,9 +100,6 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("switch", { name: "Guided viewport" }));
     expect(screen.getByRole("switch", { name: "Guided viewport" })).toBeChecked();
-
-    fireEvent.click(within(modeSwitch).getByRole("radio", { name: "Replay" }));
-    expect(within(modeSwitch).getByRole("radio", { name: "Replay" })).toBeChecked();
   });
 
   it("collapses and restores the split side panels", () => {

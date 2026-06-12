@@ -35,6 +35,7 @@ test.describe("editable FlowPlay demo", () => {
   test("add and edit a node produce typed steps with enabled playback toggles", async ({ page }) => {
     await openDemo(page);
 
+    await page.getByText("Edit flow").click();
     await page.getByRole("button", { name: "Add follow-up node" }).click();
     await page.getByRole("button", { name: "Edit reviewer label" }).click();
 
@@ -99,6 +100,7 @@ test.describe("editable FlowPlay demo", () => {
   test("connect and delete edges record edge-connect and edge-delete steps", async ({ page }) => {
     await openDemo(page);
 
+    await page.getByText("Edit flow").click();
     await connectFlowNodes(page, "request", "handoff");
     await page.getByRole("button", { name: "Delete request edge" }).click();
 
@@ -109,17 +111,20 @@ test.describe("editable FlowPlay demo", () => {
     await expect(page.getByTestId("edge-connect-request-handoff-4")).toBeVisible();
   });
 
-  test("replay mode shows canvas after-state for a selected enabled step", async ({ page }) => {
+  test("highlight-only demo keeps edited flow visible without replay controls", async ({ page }) => {
     await openDemo(page);
 
+    await expect(page.getByRole("radiogroup", { name: "Playback mode" })).toHaveCount(0);
+    await expect(page.getByRole("radio", { name: "Replay" })).toHaveCount(0);
+
+    await page.getByText("Edit flow").click();
     await page.getByRole("button", { name: "Add follow-up node" }).click();
     await page.getByRole("button", { name: "Edit reviewer label" }).click();
 
     const stepList = curatedStepList(page);
-    await page.getByRole("radio", { name: "Replay" }).check();
 
     await stepList.getByRole("button", { name: "Collect request context", exact: true }).click();
-    await expect(page.getByTestId("node-follow-up")).toHaveCount(0);
+    await expect(page.getByTestId("node-follow-up")).toHaveCount(1);
     await expect(page.getByTestId("node-review")).toHaveCount(1);
 
     await stepList.getByRole("button", { name: "Add Follow-up review", exact: true }).click();

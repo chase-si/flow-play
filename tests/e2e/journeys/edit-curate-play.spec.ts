@@ -7,9 +7,12 @@ import {
   playbackControls
 } from "../helpers/demo";
 
-test("smoke journey: edit, curate, highlight play, and replay after-state", async ({ page }) => {
+test("smoke journey: edit, curate, and highlight play", async ({ page }) => {
   await openDemo(page);
+  await expect(page.getByRole("radiogroup", { name: "Playback mode" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Replay" })).toHaveCount(0);
 
+  await page.getByText("Edit flow").click();
   await page.getByRole("button", { name: "Add follow-up node" }).click();
   await page.getByRole("button", { name: "Edit reviewer label" }).click();
   await dragFlowNodeBy(page, "follow-up", 24, 16);
@@ -35,7 +38,6 @@ test("smoke journey: edit, curate, highlight play, and replay after-state", asyn
   await expect(page.getByText("playing")).toBeVisible();
   await controls.getByRole("button", { name: "Pause", exact: true }).click();
 
-  await page.getByRole("radio", { name: "Replay" }).check();
   await stepList.getByRole("button", { name: "Connect request to handoff", exact: true }).click();
   await expect(page.getByTestId("node-follow-up")).toHaveCount(1);
   await expect(page.getByRole("article")).toContainText("connect-request-handoff-4");

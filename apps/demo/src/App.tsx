@@ -120,15 +120,6 @@ function PlaybackDemo() {
     steps,
     defaultDurationMs: 2_400,
     formatNodeLabel: formatDemoNodeLabel,
-    initialReplayMode: false,
-    onReplayExit: (state) => {
-      setDemoNodes(state.nodes as Node<DemoNodeData>[]);
-      setDemoEdges(state.edges as Edge<DemoEdgeData>[]);
-    },
-    replay: {
-      initialNodes,
-      initialEdges
-    },
     viewport: { enabled: guidedViewport, reactFlow }
   });
 
@@ -268,9 +259,8 @@ function SplitPlaybackLayout({
             playback={playback}
             role="group"
           />
-          <ModeAndViewportControls
+          <ViewportControls
             guidedViewport={guidedViewport}
-            playback={playback}
             setGuidedViewport={setGuidedViewport}
           />
           <FlowEditMenu actions={editActions} />
@@ -456,37 +446,15 @@ function StepTimeline({
   );
 }
 
-function ModeAndViewportControls({
+function ViewportControls({
   guidedViewport,
-  playback,
   setGuidedViewport
 }: {
   guidedViewport: boolean;
-  playback: DemoPlayback;
   setGuidedViewport: Dispatch<SetStateAction<boolean>>;
 }) {
   return (
     <div className="prototype-secondary-controls">
-      <div className="mode-controls" role="radiogroup" aria-label="Playback mode">
-        <label>
-          <input
-            checked={!playback.isReplayMode}
-            name="playback-mode"
-            onChange={() => playback.exitReplayMode()}
-            type="radio"
-          />
-          <span>Highlight</span>
-        </label>
-        <label>
-          <input
-            checked={playback.isReplayMode}
-            name="playback-mode"
-            onChange={() => playback.enterReplayMode()}
-            type="radio"
-          />
-          <span>Replay</span>
-        </label>
-      </div>
       <label className="viewport-toggle">
         <input
           checked={guidedViewport}
